@@ -1,5 +1,18 @@
 import { PortfolioStudio } from "@/features/studio/portfolio-studio";
+import { hasSupabaseConfig } from "@/lib/supabase/config";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { validateSiteDocument } from "@/domain/site-document";
 
-export default function Home() {
-  return <PortfolioStudio />;
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  if (!hasSupabaseConfig) return <PortfolioStudio />;
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return <PortfolioStudio />;
+  const { data: project } = await supabase.from("projects").select("id,name,document,revision").order("updated_at", { ascending: false }).limit(1).maybeSingle();
+  if (!project) return <PortfolioStudio authenticated />;
+  const { data: live } = await supabase.from("project_publications").select("slug,revision,published_at").eq("project_id", project.id).is("superseded_at", null).maybeSingle();
+  const document = validateSiteDocument(project.document);
+  return <PortfolioStudio initialDocument={{ ...document, revision: project.revision }} projectName={project.name} persistence="server" initialPublication={live ?? undefined} authenticated />;
 }

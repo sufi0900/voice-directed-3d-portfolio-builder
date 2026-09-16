@@ -33,6 +33,7 @@ export function studioReducer(state: StudioState, action: StudioAction): StudioS
     }
     case "execute": {
       const next = applySiteCommand(state.present, action.command);
+      if (next === state.present) return state;
       return {
         ...state,
         past: [...state.past.slice(-29), state.present],

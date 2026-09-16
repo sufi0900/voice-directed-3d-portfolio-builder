@@ -26,4 +26,20 @@ describe("site command bus", () => {
   it("refuses to focus a missing skill", () => {
     expect(() => applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "scene.focusSkill", skillId: "missing" })).toThrow();
   });
+
+  it("does not create a revision for an unchanged buffered text commit", () => {
+    const result = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "identity.set", field: "name", value: `  ${DEFAULT_SITE_DOCUMENT.identity.name}  ` });
+    expect(result).toBe(DEFAULT_SITE_DOCUMENT);
+    expect(result.revision).toBe(0);
+  });
+
+  it("adds, edits and removes featured skills through validated commands", () => {
+    const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "skill.add", label: "Accessibility" });
+    const skill = added.skills.find((item) => item.label === "Accessibility");
+    expect(skill).toBeDefined();
+    const updated = applySiteCommand(added, { type: "skill.update", skillId: skill!.id, label: "Inclusive UX", level: 5 });
+    expect(updated.skills.find((item) => item.id === skill!.id)).toMatchObject({ label: "Inclusive UX", level: 5 });
+    const removed = applySiteCommand(updated, { type: "skill.remove", skillId: skill!.id });
+    expect(removed.skills.some((item) => item.id === skill!.id)).toBe(false);
+  });
 });

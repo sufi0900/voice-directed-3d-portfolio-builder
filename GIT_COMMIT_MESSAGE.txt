@@ -1,0 +1,8 @@
+feat(voxfolio): stabilize user lifecycle and project navigation
+
+- route guest drafts through auth and cloud claiming
+- open the latest project for authenticated homepage visitors
+- expose My Projects and independent edit/live dashboard actions
+- show publication URLs and live revisions on project cards
+- add Voxfolio app icon, manifest, and V9–V15 roadmap
+- document Milestone 8.x acceptance and sub-version rules

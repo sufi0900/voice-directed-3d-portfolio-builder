@@ -5,6 +5,23 @@ export const backgroundOptions = ["midnight", "ink", "plum", "cloud"] as const;
 export const alignmentOptions = ["left", "center", "right"] as const;
 export const scenePresetOptions = ["cosmic", "architect", "minimal"] as const;
 export const motionOptions = ["calm", "dynamic", "still"] as const;
+export const cvFactKindOptions = ["name", "role", "intro", "skill", "education", "experience"] as const;
+
+export const approvedCvFactSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(cvFactKindOptions),
+  value: z.string().trim().min(1).max(220),
+  sourceExcerpt: z.string().trim().min(1).max(320),
+});
+
+export const cvProvenanceSchema = z.object({
+  sourceId: z.string().min(1),
+  fileName: z.string().min(1).max(180),
+  mediaType: z.string().min(1).max(120),
+  importedAt: z.string(),
+  originalStored: z.literal(false),
+  approvedFacts: z.array(approvedCvFactSchema).max(40),
+});
 
 export const siteDocumentSchema = z.object({
   schemaVersion: z.literal(1),
@@ -30,6 +47,14 @@ export const siteDocumentSchema = z.object({
     focusedSkill: z.string().nullable(),
   }),
   skills: z.array(z.object({ id: z.string(), label: z.string().min(1).max(32), level: z.number().min(1).max(5) })).min(3).max(8),
+  guidedInterview: z.object({
+    goal: z.enum(["win-clients", "showcase-work", "find-role"]),
+    audience: z.enum(["clients", "employers", "collaborators"]),
+    tone: z.enum(["bold", "structured", "minimal"]),
+    motion: z.enum(["immersive", "balanced", "reduced"]),
+    emphasis: z.enum(["skills", "story", "results"]),
+  }).optional(),
+  provenance: z.object({ cv: cvProvenanceSchema.optional() }).optional(),
 });
 
 export type SiteDocument = z.infer<typeof siteDocumentSchema>;
@@ -38,6 +63,8 @@ export type Background = SiteDocument["design"]["background"];
 export type HeroAlignment = SiteDocument["design"]["heroAlignment"];
 export type ScenePreset = SiteDocument["scene"]["preset"];
 export type MotionMode = SiteDocument["scene"]["motion"];
+export type ApprovedCvFact = z.infer<typeof approvedCvFactSchema>;
+export type CvProvenance = z.infer<typeof cvProvenanceSchema>;
 
 export const DEFAULT_SITE_DOCUMENT: SiteDocument = {
   schemaVersion: 1,
