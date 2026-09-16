@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const item = await publication(slug);
   if (!item) return { title: "Portfolio not found — Voxfolio" };
-  return { title: `${item.document.identity.name} — ${item.document.identity.role}`, description: item.document.identity.intro };
+  return { title: `${item.document.identity.name} — ${item.document.identity.role}`, description: item.document.identity.intro, icons: item.document.media.headshotUrl ? { icon: item.document.media.headshotUrl } : undefined };
 }
 
 export default async function PublicPortfolioPage({ params }: { params: Promise<{ slug: string }> }) {

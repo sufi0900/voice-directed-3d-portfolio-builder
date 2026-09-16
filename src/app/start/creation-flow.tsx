@@ -22,7 +22,7 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
   const [cvSource, setCvSource] = useState<{ sourceId: string; fileName: string; mediaType: string } | null>(null);
   const [cvCandidates, setCvCandidates] = useState<Array<CvCandidate & { approved: boolean }>>([]);
   const [interview, setInterview] = useState<Partial<GuidedInterview>>({});
-  const [form, setForm] = useState({ projectName: "", name: "", role: "", intro: "" });
+  const [form, setForm] = useState({ projectName: "", name: "", role: "", intro: "", skills: "", education: "" });
 
   async function create() {
     if (!authenticated) return router.push("/login");
@@ -33,7 +33,7 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
       originalStored: false as const,
       approvedFacts: cvCandidates.filter((item) => item.approved).map((item) => ({ id: item.id, kind: item.kind, value: item.value, sourceExcerpt: item.sourceExcerpt })),
     } : undefined;
-    const body = mode === "template" ? { mode, templateId, projectName: form.projectName } : { mode: "guided", ...form, cv, interview };
+    const body = mode === "template" ? { mode, templateId, projectName: form.projectName } : { mode: "guided", ...form, skills: form.skills.split(",").map((item) => item.trim()).filter(Boolean), education: form.education.split("\n").map((item) => item.trim()).filter(Boolean), cv, interview };
     const response = await fetch("/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const result = await response.json(); setBusy(false);
     if (!response.ok) return setError(result.error ?? "Could not create the project.");
@@ -65,7 +65,9 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
   function applyApprovedFacts() {
     const approved = cvCandidates.filter((item) => item.approved);
     const value = (kind: CvCandidate["kind"]) => approved.find((item) => item.kind === kind)?.value;
-    setForm((current) => ({ ...current, name: value("name") ?? current.name, role: value("role") ?? current.role, intro: value("intro") ?? current.intro }));
+    const skills = approved.filter((item) => item.kind === "skill").map((item) => item.value);
+    const education = approved.filter((item) => item.kind === "education").map((item) => item.value);
+    setForm((current) => ({ ...current, name: value("name") ?? current.name, role: value("role") ?? current.role, intro: value("intro") ?? current.intro, skills: skills.length ? skills.join(", ") : current.skills, education: education.length ? education.join("\n") : current.education }));
   }
 
   if (!mode) return <section className="choice-grid">
@@ -82,6 +84,8 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
       <label>Your name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
       <label>Professional role<input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} /></label>
       <label>Short positioning statement<textarea value={form.intro} onChange={(e) => setForm({ ...form, intro: e.target.value })} maxLength={220} /></label>
+      <label>Core skills <small className="field-help">Optional · separate skills with commas</small><textarea value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} maxLength={300} placeholder="Next.js, Technical SEO, AI Automation" /></label>
+      <label>Education <small className="field-help">Optional · add one credential per line</small><textarea value={form.education} onChange={(e) => setForm({ ...form, education: e.target.value })} maxLength={600} placeholder="MCS — Abdul Wali Khan University Mardan" /></label>
       <section className={`cv-import ${cvBusy ? "is-processing" : ""}`} aria-busy={cvBusy}>
         <div><span className="eyebrow">OPTIONAL CV GROUNDING</span><h2>Import facts, then approve them</h2><p>PDF, DOCX, or TXT · maximum 5 MB. The original file is processed temporarily and is not stored.</p></div>
         <div className="cv-upload-row">

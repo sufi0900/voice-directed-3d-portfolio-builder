@@ -1,8 +1,6 @@
-feat(voxfolio): stabilize user lifecycle and project navigation
+fix(v10.1): correct Supabase headshot storage policies
 
-- route guest drafts through auth and cloud claiming
-- open the latest project for authenticated homepage visitors
-- expose My Projects and independent edit/live dashboard actions
-- show publication URLs and live revisions on project cards
-- add Voxfolio app icon, manifest, and V9–V15 roadmap
-- document Milestone 8.x acceptance and sub-version rules
+- grant select permission required by Storage upserts
+- authorize media operations through JWT-owned folder paths
+- make the media policy migration safe to rerun
+- surface an actionable migration error when RLS blocks uploads

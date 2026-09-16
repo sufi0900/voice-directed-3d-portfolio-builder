@@ -17,12 +17,12 @@ type VoiceOptions = {
 type AgentEvent = Record<string, unknown> & { type?: string; text?: string; status?: string; call_id?: string; name?: string; arguments?: unknown; data?: string; message?: string; session_id?: string };
 type PendingTool = { callId: string; result: unknown };
 
-const SYSTEM_PROMPT = `You are Vox, a concise portfolio design assistant inside a visual editor. Manual controls remain available for precise edits. Use function tools whenever the user requests a visible change. Never claim a change happened unless the tool result confirms it. Stay within the approved presets and existing portfolio facts. Do not invent experience, skills or qualifications. If a request is ambiguous, ask one short clarification. You cannot publish, delete a project, upload files or execute code. Keep spoken replies under two sentences and mention the visible result after a successful tool call.`;
+const SYSTEM_PROMPT = `You are Vox, a concise portfolio editing assistant inside a visual editor. You can edit Hero, About, Skills, Experience, Education, Projects, Contact, section structure, design, and the 3D scene through the provided tools. Use a function tool for every requested visible change and never claim success before its result confirms it. When the user gives rough narrative copy for an introduction, About paragraph, experience summary, education summary, or project summary, pass their raw facts to the relevant tool with polishing enabled. Polishing may improve wording but must never invent achievements, metrics, employers, dates, qualifications, or skills. Ask one short clarification when the target item or facts are ambiguous. You cannot publish, delete a project, upload files, or execute code. Keep spoken replies under two sentences.`;
 
 export function useAssemblyAIAgent({ document, execute, undo }: VoiceOptions) {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [transcript, setTranscript] = useState<TranscriptItem[]>([
-    { id: "welcome", speaker: "system", text: "Voice is optional. Start a session, then try “switch to violet” or “focus on AI automation.”", final: true },
+    { id: "welcome", speaker: "system", text: "Voice can edit every portfolio section. Try “turn these notes into my About section” or “add Technical SEO as a skill.”", final: true },
   ]);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -46,6 +46,13 @@ export function useAssemblyAIAgent({ document, execute, undo }: VoiceOptions) {
   const appendTranscript = useCallback((speaker: TranscriptItem["speaker"], text: string, final = true) => {
     if (!text.trim()) return;
     setTranscript((items) => [...items.slice(-29), { id: `${Date.now()}-${Math.random()}`, speaker, text, final }]);
+  }, []);
+
+  const polish = useCallback(async (text: string, target: "hero_intro" | "about_body" | "experience_summary" | "education_summary" | "project_summary") => {
+    const response = await fetch("/api/content/polish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, target }) });
+    const result = await response.json();
+    if (!response.ok || !result.text) throw new Error(result.error ?? "AI writing refinement failed.");
+    return String(result.text);
   }, []);
 
   const cleanup = useCallback(async () => {
@@ -111,9 +118,10 @@ export function useAssemblyAIAgent({ document, execute, undo }: VoiceOptions) {
     if (type === "transcript.user" && typeof event.text === "string") appendTranscript("user", event.text);
     if (type === "transcript.agent" && typeof event.text === "string") appendTranscript("agent", event.text);
     if (type === "tool.call" && event.call_id && event.name) {
-      const result = runVoiceTool(event.name, event.arguments, executeRef.current, undoRef.current);
-      pendingToolsRef.current.push({ callId: event.call_id, result });
-      flushTools();
+      void runVoiceTool(event.name, event.arguments, executeRef.current, undoRef.current, polish).then((result) => {
+        pendingToolsRef.current.push({ callId: event.call_id!, result });
+        flushTools();
+      });
     }
     if (type === "reply.done") {
       lastEventRef.current = type;
@@ -139,7 +147,7 @@ export function useAssemblyAIAgent({ document, execute, undo }: VoiceOptions) {
       appendTranscript("system", message);
       setStatus("error");
     }
-  }, [appendTranscript, cleanup, flushTools, playAudio]);
+  }, [appendTranscript, cleanup, flushTools, playAudio, polish]);
 
   const start = useCallback(async () => {
     if (status !== "idle" && status !== "error") return;

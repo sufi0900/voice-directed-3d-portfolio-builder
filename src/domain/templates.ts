@@ -30,7 +30,7 @@ export function getTemplate(id: string) {
   return PORTFOLIO_TEMPLATES.find((template) => template.id === id);
 }
 
-export function buildGuidedDocument(input: { name: string; role: string; intro: string; style: "creative" | "technical" | "minimal"; projectId?: string; cv?: CvProvenance; interview?: GuidedInterview }): SiteDocument {
+export function buildGuidedDocument(input: { name: string; role: string; intro: string; skills?: string[]; education?: string[]; style: "creative" | "technical" | "minimal"; projectId?: string; cv?: CvProvenance; interview?: GuidedInterview }): SiteDocument {
   const templateId = input.style === "technical" ? "architect-grid" : input.style === "minimal" ? "minimal-signal" : "orbital-creator";
   const template = getTemplate(templateId)!;
   const approved = input.cv?.approvedFacts ?? [];
@@ -40,6 +40,15 @@ export function buildGuidedDocument(input: { name: string; role: string; intro: 
     label: item.value.slice(0, 32),
     level: 4,
   }));
+  const suppliedSkills = (input.skills ?? []).slice(0, 8).map((label, index) => ({ id: `guided-skill-${index + 1}`, label: label.slice(0, 32), level: 3 }));
+  const selectedSkills = cvSkills.length ? cvSkills : suppliedSkills;
+  const skills = selectedSkills.length === 0
+    ? template.document.skills
+    : selectedSkills.length >= 3
+      ? selectedSkills
+      : [...selectedSkills, ...template.document.skills.filter((defaultSkill) => !selectedSkills.some((skill) => skill.label.toLowerCase() === defaultSkill.label.toLowerCase()))].slice(0, 3);
+  const cvEducation = approved.filter((item) => item.kind === "education").map((item) => item.value);
+  const education = (cvEducation.length ? cvEducation : input.education ?? []).slice(0, 8).map((credential, index) => ({ id: `education-${index + 1}`, credential: credential.slice(0, 140), institution: "", period: "", summary: "" }));
   const document: SiteDocument = {
     ...template.document,
     projectId: input.projectId ?? crypto.randomUUID(),
@@ -50,7 +59,8 @@ export function buildGuidedDocument(input: { name: string; role: string; intro: 
       role: fact("role") ?? input.role,
       intro: fact("intro") ?? input.intro,
     },
-    skills: cvSkills.length >= 3 ? cvSkills : template.document.skills,
+    skills,
+    content: { ...template.document.content, education },
     provenance: input.cv ? { cv: input.cv } : undefined,
   };
   return input.interview ? applyGuidedInterview(document, input.interview) : document;

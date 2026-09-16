@@ -7,7 +7,7 @@ import { guidedInterviewSchema } from "@/domain/guided-interview";
 
 const createSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("template"), templateId: z.string().min(1), projectName: z.string().trim().min(1).max(80) }),
-  z.object({ mode: z.literal("guided"), projectName: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(60), role: z.string().trim().min(1).max(80), intro: z.string().trim().min(1).max(220), cv: cvProvenanceSchema.optional(), interview: guidedInterviewSchema }),
+  z.object({ mode: z.literal("guided"), projectName: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(60), role: z.string().trim().min(1).max(80), intro: z.string().trim().min(1).max(220), skills: z.array(z.string().trim().min(1).max(32)).max(8).default([]), education: z.array(z.string().trim().min(1).max(220)).max(8).default([]), cv: cvProvenanceSchema.optional(), interview: guidedInterviewSchema }),
   z.object({ mode: z.literal("demo"), projectName: z.string().trim().min(1).max(80), document: siteDocumentSchema }),
 ]);
 

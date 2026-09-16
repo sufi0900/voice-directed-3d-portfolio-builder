@@ -1,6 +1,41 @@
-# Milestone 8.1 — User lifecycle and navigation stabilization
+# Milestone 10.1 — Storage policy correction
 
 ## Completed
+
+1. Headshot upserts now have the Supabase Storage `SELECT`, `INSERT`, `UPDATE` and `DELETE` policies required for owner-folder replacements.
+2. Storage policies use the authenticated JWT subject and path ownership rather than mutable object ownership metadata.
+3. Media migrations are idempotent and can safely replace the original V10 policies.
+4. Upload failures now identify the exact recovery migration instead of exposing the raw PostgreSQL RLS error.
+
+## V10 capability retained
+
+1. The voice assistant can edit Hero, About, Skills, Experience, Education, Projects, Contact, section structure, design and the 3D scene.
+2. Every voice mutation uses the same validated commands, revisions, undo/redo and cloud autosave as manual controls.
+3. Raw narrative copy can be refined through a server-only OpenAI Responses request with `store: false` before the validated command is applied.
+4. AI refinement is fact-preserving: it is instructed not to add metrics, employers, dates, credentials, achievements or skills.
+5. Guided Creation includes optional comma-separated skills and line-separated education credentials.
+6. Approved CV skills and education facts populate the same portfolio fields, keeping onboarding sources synchronized.
+7. Education has complete manual and voice add, update and remove controls and renders with the professional journey.
+8. Owners can upload a validated JPG, PNG or WebP headshot up to 3 MB into an owner-scoped Supabase Storage path.
+9. The About section renders uploaded headshots with responsive cropping, alignment, spacing and mobile layout.
+10. Studio preview uses the headshot as its favicon, with an initial-based fallback; published metadata uses the published headshot.
+11. Public navigation identifies the portfolio owner by initials and name, exposes section navigation and removes editor/publishing labels.
+12. Legacy V9 documents receive default education and media fields without losing existing content.
+
+## V9 foundation retained
+
+1. V8.2 preserves authenticated state in every saved-project Studio and replaces the incorrect Sign In action with My Projects plus an account indicator.
+2. My Projects provides a direct Home navigation path while preserving sign-out and account context.
+3. The validated document now includes ordered, visibility-controlled About, Experience, Skills, Projects and Contact sections.
+4. Existing V1–V8 documents are upgraded automatically through schema defaults; no SQL migration is required.
+5. Every new content mutation uses the same typed command bus, revision history, undo/redo, autosave and immutable publication boundaries.
+6. Owners can add, edit and remove repeatable experience and project records within safe limits.
+7. Owners can reorder or hide page sections without deleting their content.
+8. Studio preview and public snapshots render the same reusable section components and anchored navigation.
+9. Empty draft collections have editor guidance while empty public collections remain hidden.
+10. Responsive layouts cover navigation, section headings, capability cards, experience timelines, project cards and contact calls to action.
+
+## Earlier foundation retained
 
 1. A strict `SiteDocument` schema is the single source of truth.
 2. Manual controls dispatch typed commands rather than modifying components directly.
@@ -74,7 +109,7 @@
 70. Project cards separate Edit Studio, View Live and Rename actions and show the exact published slug and revision.
 71. Post-authentication destinations are allowlisted as internal paths to prevent open redirects.
 72. Voxfolio now provides a generated application icon and installable web manifest through Next.js metadata conventions.
-73. A committed V9–V15 roadmap defines seven remaining major milestones and formalizes sub-version acceptance rules.
+73. The committed roadmap formalizes major/sub-version acceptance rules and now records five remaining milestones after V10.
 
 ## Manual verification requiring the owner’s environment
 
@@ -88,9 +123,12 @@
 - Add `OPENAI_API_KEY` locally, enable AI-enhanced extraction and test at least three visually different CV templates.
 - Temporarily use an invalid OpenAI key and confirm the same upload recovers to local extraction with a visible notice.
 
-## Acceptance gate before V9
+## V10 owner acceptance gate
 
-- Verify guest customization survives sign-in and becomes a cloud project through `/claim`.
-- Verify authenticated homepage access opens the most recently updated project.
-- Verify each dashboard card exposes independent Edit Studio and View Live actions.
-- Record any corrections as V8.2; begin V9 only when these checks pass.
+- Run `004_portfolio_media.sql`, upload a headshot and verify it survives reload and publication.
+- Confirm Studio and published browser tabs use the headshot or initial-based favicon.
+- Use voice to edit every section type, then test undo and revision restore.
+- Dictate rough About and Introduction copy and confirm OpenAI improves wording without adding facts.
+- Create a new project with optional skills and education and confirm both appear in Studio and the published page.
+- Confirm the public header shows owner identity and navigation with no Publish Portfolio/editor wording.
+- Record corrections as V10.1/V10.2; begin V11 only after this gate passes.

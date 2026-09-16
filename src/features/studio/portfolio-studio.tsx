@@ -13,6 +13,7 @@ import { initialStudioState, studioReducer } from "./studio-reducer";
 import { useAssemblyAIAgent } from "@/features/voice/use-assemblyai-agent";
 import { VoicePanel } from "@/features/voice/voice-panel";
 import { RevisionHistory } from "./revision-history";
+import { PortfolioNavigation, PortfolioSections } from "@/features/portfolio/portfolio-sections";
 
 const OrbitalShowcase = dynamic(() => import("@/features/scene/orbital-showcase").then((module) => module.OrbitalShowcase), {
   ssr: false,
@@ -24,7 +25,7 @@ const backgroundClass = { midnight: "bg-midnight", ink: "bg-ink", plum: "bg-plum
 
 type Publication = { slug: string; revision: number; published_at: string };
 
-export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio", persistence = "local", initialPublication, authenticated = false }: { initialDocument?: SiteDocument; projectName?: string; persistence?: "local" | "server"; initialPublication?: Publication; authenticated?: boolean }) {
+export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio", persistence = "local", initialPublication, authenticated = false, userEmail }: { initialDocument?: SiteDocument; projectName?: string; persistence?: "local" | "server"; initialPublication?: Publication; authenticated?: boolean; userEmail?: string }) {
   const [state, dispatch] = useReducer(studioReducer, initialStudioState);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -51,6 +52,15 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     dispatch({ type: "hydrate", document: stored });
     return () => preference.removeEventListener("change", sync);
   }, []);
+
+  useEffect(() => {
+    const existing = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    const link = existing ?? document.head.appendChild(document.createElement("link"));
+    const previous = link.href;
+    link.rel = "icon";
+    link.href = state.present.media.headshotUrl || initialsFavicon(state.present.identity.name, state.present.design.accent);
+    return () => { link.href = previous; if (!existing) link.remove(); };
+  }, [state.present.design.accent, state.present.identity.name, state.present.media.headshotUrl]);
 
   useEffect(() => {
     if (!state.hydrated) return;
@@ -103,6 +113,7 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
           {persistence === "server" && <button type="button" onClick={() => setHistoryOpen(true)}><Clock3 size={16} />History</button>}
           {persistence === "local" && <Link className="publish-button top-link" href={guestClaimPath(authenticated)}><Save size={15} />Save & publish</Link>}
           <Link className="top-link" href={authenticated ? "/projects" : "/login"}>{authenticated ? "My projects" : "Sign in"}</Link>
+          {authenticated && userEmail && <span className="account-pill" title={userEmail} aria-label={`Signed in as ${userEmail}`}>{userEmail.slice(0, 1).toUpperCase()}</span>}
         </div>
       </header>
 
@@ -114,15 +125,17 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
             <Tab active={state.selectedPanel === "design"} label="Design" icon={<Palette size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "design" })} />
             <Tab active={state.selectedPanel === "scene"} label="3D Scene" icon={<Layers3 size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "scene" })} />
           </nav>
-          <ManualControls document={state.present} execute={executeManual} panel={state.selectedPanel} />
+          <ManualControls document={state.present} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} />
           <button type="button" className="reset-button" onClick={() => dispatch({ type: "reset" })}><RotateCcw size={14} />Reset demo</button>
         </aside>
 
         <section className="preview-shell" aria-label="Live portfolio preview">
           <div className="preview-chrome"><span /><span /><span /><p>portfolio.preview</p><em>LIVE CANVAS</em></div>
-          <div className={`portfolio-preview align-${state.present.design.heroAlignment}`}>
-            <div className="ambient-grid" />
-            <div className="portfolio-copy">
+          <div className="portfolio-preview">
+            <PortfolioNavigation document={state.present} />
+            <div className={`portfolio-hero align-${state.present.design.heroAlignment}`}>
+              <div className="ambient-grid" />
+              <div className="portfolio-copy">
               <p className="availability"><i />{state.present.identity.availability}</p>
               <p className="kicker">DESIGNING USEFUL DIGITAL SYSTEMS</p>
               <h2>{state.present.identity.name}</h2>
@@ -130,11 +143,13 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
               <p className="intro">{state.present.identity.intro}</p>
               <div className="hero-actions"><button>View selected work</button><button className="ghost">Start a conversation</button></div>
               {focusedSkill && <div className="focus-card"><span>SCENE FOCUS</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}
+              </div>
+              <div className="scene-stage">
+                <OrbitalShowcase document={state.present} execute={executeManual} reducedMotion={reducedMotion} />
+                <div className="scene-caption"><Volume2 size={14} /><span>Drag to orbit · Scroll to zoom · Select a skill</span></div>
+              </div>
             </div>
-            <div className="scene-stage">
-              <OrbitalShowcase document={state.present} execute={executeManual} reducedMotion={reducedMotion} />
-              <div className="scene-caption"><Volume2 size={14} /><span>Drag to orbit · Scroll to zoom · Select a skill</span></div>
-            </div>
+            <PortfolioSections document={state.present} editing />
           </div>
         </section>
 
@@ -159,4 +174,11 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
 
 function Tab({ active, label, icon, onClick }: { active: boolean; label: string; icon: React.ReactNode; onClick: () => void }) {
   return <button type="button" className={active ? "active" : ""} onClick={onClick}>{icon}{label}</button>;
+}
+
+function initialsFavicon(name: string, accent: string) {
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "VF";
+  const colors: Record<string, string> = { cyan: "#4deeea", violet: "#a78bfa", coral: "#fb7185", lime: "#a3e635" };
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="${colors[accent] ?? colors.cyan}"/><text x="32" y="41" text-anchor="middle" font-family="Arial,sans-serif" font-size="24" font-weight="800" fill="#061013">${initials}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }

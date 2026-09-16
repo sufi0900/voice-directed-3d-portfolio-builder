@@ -31,7 +31,7 @@ export function ProjectDashboard({ projects: initialProjects, email }: { project
     cancelRename();
   }
 
-  return <main className="flow-page wide"><header className="flow-nav"><span>{email}</span><strong>VOXFOLIO</strong><button className="text-action" onClick={signOut}>Sign out</button></header>
+  return <main className="flow-page wide"><header className="flow-nav"><div className="flow-nav-start"><Link href="/">Home</Link><span>{email}</span></div><Link className="flow-brand" href="/">VOXFOLIO</Link><button className="text-action" onClick={signOut}>Sign out</button></header>
     <div className="dashboard-heading"><div><p className="eyebrow">YOUR WORKSPACE</p><h1>Saved portfolios</h1><p>Continue from the last server-backed revision.</p></div><Link className="primary-action" href="/start">Create new</Link></div>
     {renameError && <div className="form-message dashboard-message">{renameError}</div>}
     <section className="project-grid">{projects.length ? projects.map((project) => <article className="project-card" key={project.id}>

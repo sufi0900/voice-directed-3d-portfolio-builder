@@ -37,6 +37,14 @@ An implementation-ready portfolio builder in which authenticated cloud projects,
 - Immutable publication snapshots and public `/p/[slug]` portfolio routes
 - Visual revision timeline with non-destructive restore controls
 - Session-aware homepage, guest-draft claiming and publication-aware project dashboard
+- Authenticated Studio identity and direct Home/My Projects navigation
+- Full About, Experience, Skills, Projects and Contact section model
+- Section ordering, visibility and shared Studio/public rendering
+- Voice editing parity across every portfolio content section
+- Fact-preserving OpenAI copy refinement for raw narrative input
+- Optional skills and education during Guided Creation
+- Owner-scoped headshot uploads, responsive About media and dynamic favicons
+- Identity-led public navigation without editor or publishing controls
 
 ## Setup
 
@@ -56,13 +64,14 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_anon_key
 OPENAI_API_KEY=your_private_openai_key
 OPENAI_CV_MODEL=gpt-5-mini
+OPENAI_CONTENT_MODEL=gpt-5-mini
 OPENAI_CV_TIMEOUT_MS=60000
 ```
 
-Create a Supabase project, then run the SQL files in order: `supabase/migrations/001_projects.sql`, `002_publications.sql`, and `003_revision_restore.sql`. Existing Milestone 7 installations only need to run `003_revision_restore.sql`. The anonymous key is safe to expose only because the migrations enable row-level security: drafts and revision history remain owner-only and anonymous visitors can select only live publication snapshots. Never expose a service-role key.
+Create a Supabase project, then run the SQL files in order: `supabase/migrations/001_projects.sql`, `002_publications.sql`, `003_revision_restore.sql`, and `004_portfolio_media.sql`. Existing V9 installations only need to run `004_portfolio_media.sql`. If the original V10 media migration was already installed, run `005_fix_portfolio_media_policies.sql`; it safely replaces the policies and grants the `SELECT` permission required by Storage upserts. The media bucket has owner-folder write policies; published headshot URLs are intentionally public. Drafts and revision history remain owner-only. Never expose a service-role key.
 
 Routes: `/` is the no-account demo, `/start` offers both creation paths, `/login` handles accounts, `/projects` lists saved work, and `/studio/[projectId]` opens the cloud-saved editor.
-The homepage is lifecycle-aware: guests receive an editable local demo and authenticate only when choosing Save & publish; signed-in owners with projects open their latest cloud project directly. `/claim` validates and moves a guest draft into private cloud storage before publishing. `/projects` exposes separate editing and live-portfolio actions. See `ROADMAP.md` for the V9–V15 delivery plan and major/sub-version rules.
+The homepage is lifecycle-aware: guests receive an editable local demo and authenticate only when choosing Save & publish; signed-in owners with projects open their latest cloud project directly. `/claim` validates and moves a guest draft into private cloud storage before publishing. `/projects` exposes separate editing and live-portfolio actions. V10 adds full voice parity, education and profile media; older documents receive compatible defaults. See `ROADMAP.md` for the V11–V15 delivery plan and major/sub-version rules.
 
 In Guided Creation, an authenticated user may optionally upload a PDF, DOCX or TXT CV up to 5 MB. Extraction proposes reviewable identity, role, summary, skill, education and experience facts. Candidates are unapproved by default; only checked facts are saved, together with a short source excerpt. The original CV is processed in memory and is not retained by Voxfolio. A five-turn interview then captures the portfolio goal, primary audience, visual tone, motion preference and presentation emphasis. Those answers configure only allowlisted design fields; they never rewrite professional claims.
 

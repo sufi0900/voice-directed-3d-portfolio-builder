@@ -11,8 +11,8 @@ export default async function Home() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return <PortfolioStudio />;
   const { data: project } = await supabase.from("projects").select("id,name,document,revision").order("updated_at", { ascending: false }).limit(1).maybeSingle();
-  if (!project) return <PortfolioStudio authenticated />;
+  if (!project) return <PortfolioStudio authenticated userEmail={user.email} />;
   const { data: live } = await supabase.from("project_publications").select("slug,revision,published_at").eq("project_id", project.id).is("superseded_at", null).maybeSingle();
   const document = validateSiteDocument(project.document);
-  return <PortfolioStudio initialDocument={{ ...document, revision: project.revision }} projectName={project.name} persistence="server" initialPublication={live ?? undefined} authenticated />;
+  return <PortfolioStudio initialDocument={{ ...document, revision: project.revision }} projectName={project.name} persistence="server" initialPublication={live ?? undefined} authenticated userEmail={user.email} />;
 }
