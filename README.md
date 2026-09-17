@@ -45,6 +45,28 @@ An implementation-ready portfolio builder in which authenticated cloud projects,
 - Optional skills and education during Guided Creation
 - Owner-scoped headshot uploads, responsive About media and dynamic favicons
 - Identity-led public navigation without editor or publishing controls
+- Expanded project case studies with role, period, challenge, approach and outcome fields
+- Reusable, accessible project media library with owner-scoped uploads
+- Ordered project galleries and project-card cover imagery
+- Public case-study routes at `/p/[slug]/projects/[project-slug]`
+- Case-study metadata and social preview imagery derived from immutable publication snapshots
+- Private custom-page and blog-post drafts with explicit publication status
+- Structured heading, paragraph, quote, list and reusable-image blocks
+- Editable public slugs, navigation labels, excerpts, tags and SEO metadata
+- Immutable public page, blog-index and article routes
+- Voice-assisted page/post drafting without voice publication authority
+- Direct in-context image uploads with editable alternative text
+- Safe rich-text formatting, hyperlinks, bullet lists and numbered lists
+- Section-aware live previews and flexible resizable Studio panels
+- Dedicated public Projects index and concise four-card homepage showcase
+- Viewport-bounded Studio canvas with synchronized homepage and standalone-page navigation
+- Deterministic container-relative section routing without standalone-preview flicker
+- Inline block insertion, drag/long-press reordering and semantic H2–H6 headings
+- Live SEO guidance with search-result and canonical-path previews
+- Performance-safe cinematic depth across homepage sections and standalone content
+- Three content-preserving reusable portfolio templates
+- Orbital Showcase and Constellation Field 3D scene families
+- Responsive desktop-expanded editor and adaptive media gallery
 
 ## Setup
 
@@ -68,10 +90,22 @@ OPENAI_CONTENT_MODEL=gpt-5-mini
 OPENAI_CV_TIMEOUT_MS=60000
 ```
 
-Create a Supabase project, then run the SQL files in order: `supabase/migrations/001_projects.sql`, `002_publications.sql`, `003_revision_restore.sql`, and `004_portfolio_media.sql`. Existing V9 installations only need to run `004_portfolio_media.sql`. If the original V10 media migration was already installed, run `005_fix_portfolio_media_policies.sql`; it safely replaces the policies and grants the `SELECT` permission required by Storage upserts. The media bucket has owner-folder write policies; published headshot URLs are intentionally public. Drafts and revision history remain owner-only. Never expose a service-role key.
+Create a Supabase project, then run the SQL files in order: `supabase/migrations/001_projects.sql`, `002_publications.sql`, `003_revision_restore.sql`, `004_portfolio_media.sql`, and `005_fix_portfolio_media_policies.sql`. Existing V10.1 installations need no additional SQL for V11 or V12 because media reuse and structured publishing live inside the validated document and publication snapshot. Published media URLs are intentionally public. Drafts and revision history remain owner-only. Never expose a service-role key.
 
 Routes: `/` is the no-account demo, `/start` offers both creation paths, `/login` handles accounts, `/projects` lists saved work, and `/studio/[projectId]` opens the cloud-saved editor.
-The homepage is lifecycle-aware: guests receive an editable local demo and authenticate only when choosing Save & publish; signed-in owners with projects open their latest cloud project directly. `/claim` validates and moves a guest draft into private cloud storage before publishing. `/projects` exposes separate editing and live-portfolio actions. V10 adds full voice parity, education and profile media; older documents receive compatible defaults. See `ROADMAP.md` for the V11–V15 delivery plan and major/sub-version rules.
+The homepage is lifecycle-aware: guests receive an editable local demo and authenticate only when choosing Save & publish; signed-in owners with projects open their latest cloud project directly. `/claim` validates and moves a guest draft into private cloud storage before publishing. `/projects` exposes separate editing and live-portfolio actions. V12 adds governed custom pages and blog publishing; older documents receive compatible defaults. See `ROADMAP.md` for the V13–V15 delivery plan and major/sub-version rules.
+
+To create standalone content, open Studio → Content → Site pages. Use this area for long-form pages such as a detailed About page, Services, Process or Resources. Open Blog posts for articles; published articles are collected automatically on one Blog page and never become individual navigation tabs. Add an item, set its slug and metadata, then assemble typed content blocks. The item title is its only H1; structured headings support H2 through H6. Paragraphs, quotes and list items support safe inline formatting. Use the inline plus control after any block to insert content at that exact position. Reorder blocks by desktop drag, touch/pen long-press, or the accessible arrow controls. Images can be uploaded directly inside the cover or image block without completing alternative text first. Voxfolio derives a temporary accessible label from the filename, and the owner can replace it immediately in the visible Alt text field.
+
+An item becomes publicly accessible only after two explicit actions: include the Site Page or Blog Post in the next publication, then use the main Publish control to create a new immutable portfolio release. Included Site Pages appear in public navigation at `/p/[portfolio-slug]/pages/[page-slug]`; a page using the `about` slug is also linked from the homepage About section. Included articles are collected at `/p/[portfolio-slug]/blog`, and projects are collected at `/p/[portfolio-slug]/projects`. Public routes always read the immutable release snapshot, so later drafts remain private. Voice can help draft or edit text blocks, but only the owner-facing interface can upload images or change publication status.
+
+The Studio live canvas has its own bounded scrollbar. Selecting Hero, About, Experience, Education, Skills, Projects or Contact targets the exact section inside that canvas and leaves the corresponding editor controls visible. Opening a Site Page or Blog Post swaps the canvas to that standalone draft without a homepage flash; use **Back to homepage preview** or select any homepage section from the Editing menu to restore and position the homepage canvas. If an About Site Page exists, the homepage preview exposes **Preview detailed About**, while the published homepage exposes **Read full profile** after that page is included and the portfolio is republished.
+
+V12.4 adds cinematic depth to non-Hero content using GPU-light CSS layers rather than creating a separate WebGL canvas for every section. This preserves the existing Hero scene, mobile responsiveness, reduced-motion preferences and WebGL fallback while avoiding multiple graphics contexts and unnecessary battery use.
+
+V13 separates portfolio content from presentation. Open Design to switch between Cinematic Orbit, Architectural Grid and Editorial Depth; identity, sections, case studies, media, pages and posts remain intact. Open 3D Scene to choose Orbital Showcase or Constellation Field independently. Only one scene canvas is mounted at a time. Expanding the Content editor now activates a bounded desktop workspace with larger media, multi-column forms and an adaptive Media Library rather than stretching the sidebar controls.
+
+To create a case study, open Studio → Content → Projects, complete the project narrative fields and use a unique slug. Upload images once in Content → Media library, then attach them to one or more projects. The first selected image becomes the project-card and case-study cover. Removing an item from the document library removes its references but retains the underlying Storage object for revision and publication recovery; automated retention cleanup is scheduled for the production-readiness milestone.
 
 In Guided Creation, an authenticated user may optionally upload a PDF, DOCX or TXT CV up to 5 MB. Extraction proposes reviewable identity, role, summary, skill, education and experience facts. Candidates are unapproved by default; only checked facts are saved, together with a short source excerpt. The original CV is processed in memory and is not retained by Voxfolio. A five-turn interview then captures the portfolio goal, primary audience, visual tone, motion preference and presentation emphasis. Those answers configure only allowlisted design fields; they never rewrite professional claims.
 
@@ -91,10 +125,12 @@ Never prefix private AssemblyAI or OpenAI keys with `NEXT_PUBLIC_`, commit `.env
 - “Make the orbital scene more dynamic.”
 - “Use the architect scene.”
 - “Focus on AI automation.”
+- “Update the Voxfolio project outcome to: A revision-safe portfolio publishing workflow.”
+- “Move the Voxfolio project up.”
 - “Change my introduction to: I build accessible AI-powered digital products.”
 - “Undo that change.”
 
-Voice is intentionally unable to publish, delete projects, upload assets, execute arbitrary code or invent professional facts.
+Voice can update and reorder factual case-study content and draft structured pages or posts, but it is intentionally unable to publish, upload assets, execute arbitrary code or invent professional facts.
 
 ## Verification
 

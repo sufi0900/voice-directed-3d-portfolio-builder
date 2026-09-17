@@ -1,24 +1,22 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { Clock3, Copy, Eye, Globe2, Layers3, Palette, Redo2, RotateCcw, Save, Type, Undo2, Volume2, X } from "lucide-react";
+import { Clock3, Copy, Eye, Globe2, Layers3, Maximize2, Minimize2, Palette, PanelRightOpen, Redo2, RotateCcw, Save, Type, Undo2, Volume2, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { SiteCommand } from "@/domain/commands";
-import type { SiteDocument } from "@/domain/site-document";
+import type { PortfolioSection, SiteDocument } from "@/domain/site-document";
 import { normalizePublicationSlug } from "@/domain/publication";
 import { guestClaimPath } from "@/domain/user-lifecycle";
-import { ManualControls } from "./manual-controls";
+import { ManualControls, type PreviewTarget } from "./manual-controls";
 import { initialStudioState, studioReducer } from "./studio-reducer";
 import { useAssemblyAIAgent } from "@/features/voice/use-assemblyai-agent";
 import { VoicePanel } from "@/features/voice/voice-panel";
 import { RevisionHistory } from "./revision-history";
 import { PortfolioNavigation, PortfolioSections } from "@/features/portfolio/portfolio-sections";
-
-const OrbitalShowcase = dynamic(() => import("@/features/scene/orbital-showcase").then((module) => module.OrbitalShowcase), {
-  ssr: false,
-  loading: () => <div className="scene-loading">Preparing Orbital Showcase…</div>,
-});
+import { StructuredContent } from "@/features/public/public-content";
+import Image from "next/image";
+import { scrollPreviewContainer } from "./preview-navigation";
+import { SceneRenderer } from "@/features/scene/scene-renderer";
 
 const STORAGE_KEY = "voxfolio-demo-document-v1";
 const backgroundClass = { midnight: "bg-midnight", ink: "bg-ink", plum: "bg-plum", cloud: "bg-cloud" } as const;
@@ -41,6 +39,11 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   const [publishError, setPublishError] = useState("");
   const [slug, setSlug] = useState(initialPublication?.slug ?? normalizePublicationSlug(projectName));
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [previewTarget, setPreviewTarget] = useState<PreviewTarget>({ section: "hero" });
+  const [editorWidth, setEditorWidth] = useState(300);
+  const [voiceWidth, setVoiceWidth] = useState(320);
+  const [editorExpanded, setEditorExpanded] = useState(false);
+  const [voiceHidden, setVoiceHidden] = useState(false);
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -101,7 +104,7 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   }
 
   return (
-    <main className={`studio ${backgroundClass[state.present.design.background]} ${previewOnly ? "preview-only" : ""}`} data-accent={state.present.design.accent}>
+    <main className={`studio template-${state.present.design.template} ${backgroundClass[state.present.design.background]} ${previewOnly ? "preview-only" : ""} ${editorExpanded ? "editor-expanded" : ""}`} data-accent={state.present.design.accent}>
       <header className="topbar">
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>VOXFOLIO</strong><small>{projectName}</small></div></div>
         <div className="project-state"><span className={saved ? "saved" : "saving"}><Save size={14} />{saveError || (saved ? persistence === "server" ? "Saved to cloud" : "Saved locally" : "Saving…")}</span><i />Revision {state.present.revision}</div>
@@ -117,43 +120,28 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
         </div>
       </header>
 
-      <div className="workspace">
+      <div className="workspace" style={{ gridTemplateColumns: previewOnly ? undefined : editorExpanded ? "minmax(420px, 1fr) 0 0" : `${editorWidth}px minmax(420px,1fr) ${voiceHidden ? "0px" : `${voiceWidth}px`}` }}>
         <aside className="editor-panel">
-          <div className="panel-intro"><p className="eyebrow">PROJECT · PERSONAL PORTFOLIO</p><h1>Shape the experience</h1><p>Use direct controls for precision. Ask the voice agent for broader changes.</p></div>
+          <div className="panel-intro"><div className="panel-title-row"><div><p className="eyebrow">PROJECT · PERSONAL PORTFOLIO</p><h1>Shape the experience</h1></div><button type="button" title={editorExpanded ? "Restore workspace" : "Expand editor"} aria-label={editorExpanded ? "Restore workspace" : "Expand editor"} onClick={() => setEditorExpanded((value) => !value)}>{editorExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button></div><p>Use direct controls for precision. Ask the voice agent for broader changes.</p></div>
           <nav className="editor-tabs" aria-label="Editor sections">
             <Tab active={state.selectedPanel === "content"} label="Content" icon={<Type size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "content" })} />
             <Tab active={state.selectedPanel === "design"} label="Design" icon={<Palette size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "design" })} />
             <Tab active={state.selectedPanel === "scene"} label="3D Scene" icon={<Layers3 size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "scene" })} />
           </nav>
-          <ManualControls document={state.present} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} />
+          <div className="expanded-editor-surface"><ManualControls document={state.present} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} previewTarget={previewTarget} onPreviewTarget={setPreviewTarget} /></div>
           <button type="button" className="reset-button" onClick={() => dispatch({ type: "reset" })}><RotateCcw size={14} />Reset demo</button>
         </aside>
 
-        <section className="preview-shell" aria-label="Live portfolio preview">
+        {!editorExpanded && <button type="button" className="panel-resizer editor-resizer" style={{ left: editorWidth - 3 }} aria-label="Resize content editor" onPointerDown={(event) => beginResize(event, editorWidth, setEditorWidth, 260, 620, 1)} />}
+
+        <section className="preview-shell" aria-label="Live portfolio preview" hidden={editorExpanded}>
           <div className="preview-chrome"><span /><span /><span /><p>portfolio.preview</p><em>LIVE CANVAS</em></div>
-          <div className="portfolio-preview">
-            <PortfolioNavigation document={state.present} />
-            <div className={`portfolio-hero align-${state.present.design.heroAlignment}`}>
-              <div className="ambient-grid" />
-              <div className="portfolio-copy">
-              <p className="availability"><i />{state.present.identity.availability}</p>
-              <p className="kicker">DESIGNING USEFUL DIGITAL SYSTEMS</p>
-              <h2>{state.present.identity.name}</h2>
-              <h3>{state.present.identity.role}</h3>
-              <p className="intro">{state.present.identity.intro}</p>
-              <div className="hero-actions"><button>View selected work</button><button className="ghost">Start a conversation</button></div>
-              {focusedSkill && <div className="focus-card"><span>SCENE FOCUS</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}
-              </div>
-              <div className="scene-stage">
-                <OrbitalShowcase document={state.present} execute={executeManual} reducedMotion={reducedMotion} />
-                <div className="scene-caption"><Volume2 size={14} /><span>Drag to orbit · Scroll to zoom · Select a skill</span></div>
-              </div>
-            </div>
-            <PortfolioSections document={state.present} editing />
-          </div>
+          <StudioPreview document={state.present} target={previewTarget} focusedSkill={focusedSkill} execute={executeManual} reducedMotion={reducedMotion} onNavigate={setPreviewTarget} />
         </section>
 
-        <VoicePanel {...voice} />
+        {!editorExpanded && !voiceHidden && <button type="button" className="panel-resizer voice-resizer" style={{ right: voiceWidth - 3 }} aria-label="Resize voice assistant" onPointerDown={(event) => beginResize(event, voiceWidth, setVoiceWidth, 260, 520, -1)} />}
+        {!editorExpanded && !voiceHidden && <VoicePanel {...voice} onHide={() => setVoiceHidden(true)} />}
+        {!editorExpanded && voiceHidden && <button type="button" className="restore-voice" onClick={() => setVoiceHidden(false)}><PanelRightOpen size={16} />Show voice assistant</button>}
       </div>
       <footer className="command-footer"><span>One governed command pipeline</span><p>Manual edit <b>→</b> validation <b>→</b> revision <b>→</b> undo</p><p>Voice tool <b>→</b> validation <b>→</b> revision <b>→</b> undo</p></footer>
       {publishOpen && <div className="publish-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPublishOpen(false); }}>
@@ -170,6 +158,32 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
       {historyOpen && <RevisionHistory projectId={state.present.projectId} currentRevision={cloudRevision} onClose={() => setHistoryOpen(false)} onRestored={() => window.location.reload()} />}
     </main>
   );
+}
+
+function StudioPreview({ document, target, focusedSkill, execute, reducedMotion, onNavigate }: { document: SiteDocument; target: PreviewTarget; focusedSkill?: SiteDocument["skills"][number]; execute: (command: SiteCommand) => void; reducedMotion: boolean; onNavigate: (target: PreviewTarget) => void }) {
+  const previewRef = useRef<HTMLDivElement>(null);
+  const previousPreviewMode = useRef(target.section === "site pages" || target.section === "blog posts" ? "standalone" : "home");
+  useLayoutEffect(() => {
+    const container = previewRef.current;
+    if (!container) return;
+    const mode = target.section === "site pages" || target.section === "blog posts" ? "standalone" : "home";
+    const changedRoute = previousPreviewMode.current !== mode;
+    previousPreviewMode.current = mode;
+    const frame = window.requestAnimationFrame(() => scrollPreviewContainer(container, target, reducedMotion || changedRoute ? "auto" : "smooth"));
+    return () => window.cancelAnimationFrame(frame);
+  }, [reducedMotion, target]);
+  const item = target.section === "site pages" ? document.publishing.pages.find((entry) => entry.id === target.itemId) : target.section === "blog posts" ? document.publishing.posts.find((entry) => entry.id === target.itemId) : undefined;
+  if (target.section === "site pages" || target.section === "blog posts") { const cover = item ? document.media.assets.find((asset) => asset.id === item.coverMediaId) : undefined; return <div ref={previewRef} className="portfolio-preview content-draft-preview"><button type="button" className="preview-back-button" onClick={() => onNavigate({ section: "hero" })}>← Back to homepage preview</button>{item ? <article><p className="section-eyebrow">{target.section === "blog posts" ? "BLOG ARTICLE PREVIEW" : "SITE PAGE PREVIEW"}</p><h1>{item.title}</h1>{"excerpt" in item && item.excerpt && <p className="draft-excerpt">{item.excerpt}</p>}{cover && <figure className="published-content-cover draft-cover"><Image src={cover.url} alt={cover.alt} fill sizes="(max-width: 900px) 94vw, 900px" unoptimized /></figure>}<StructuredContent document={document} blocks={item.blocks} /></article> : <div className="portfolio-empty-state">Create an item to preview it here.</div>}</div>; }
+  const navigateSection = (section: PortfolioSection) => onNavigate({ section });
+  return <div ref={previewRef} className={`portfolio-preview template-${document.design.template}`}><PortfolioNavigation document={document} onNavigateSection={navigateSection} /><div className={`portfolio-hero align-${document.design.heroAlignment}`}><div className="ambient-grid" /><div className="portfolio-copy"><p className="availability"><i />{document.identity.availability}</p><p className="kicker">DESIGNING USEFUL DIGITAL SYSTEMS</p><h2>{document.identity.name}</h2><h3>{document.identity.role}</h3><p className="intro">{document.identity.intro}</p><div className="hero-actions"><button type="button" onClick={() => navigateSection("projects")}>View selected work</button><button type="button" className="ghost" onClick={() => navigateSection("contact")}>Start a conversation</button></div>{focusedSkill && <div className="focus-card"><span>SCENE FOCUS</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}</div><div className="scene-stage"><SceneRenderer document={document} execute={execute} reducedMotion={reducedMotion} /><div className="scene-caption"><Volume2 size={14} /><span>Drag to orbit · Scroll to zoom · Select a skill</span></div></div></div><PortfolioSections document={document} editing onOpenPage={(itemId) => onNavigate({ section: "site pages", itemId })} /></div>;
+}
+
+function beginResize(event: React.PointerEvent, initial: number, update: (value: number) => void, min: number, max: number, direction: 1 | -1) {
+  event.preventDefault();
+  const origin = event.clientX;
+  const move = (pointer: PointerEvent) => update(Math.min(max, Math.max(min, initial + (pointer.clientX - origin) * direction)));
+  const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", stop);
 }
 
 function Tab({ active, label, icon, onClick }: { active: boolean; label: string; icon: React.ReactNode; onClick: () => void }) {

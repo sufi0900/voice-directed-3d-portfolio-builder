@@ -12,7 +12,7 @@ describe("CV-grounded guided interview", () => {
       goal: "find-role", audience: "employers", tone: "structured", motion: "reduced", emphasis: "skills",
     });
     expect(result.identity.availability).toContain("professional opportunities");
-    expect(result.design).toEqual({ accent: "violet", background: "ink", heroAlignment: "left" });
+    expect(result.design).toMatchObject({ template: "cinematic-orbit", accent: "violet", background: "ink", heroAlignment: "left" });
     expect(result.scene.motion).toBe("still");
     expect(result.scene.focusedSkill).toBe("web");
     expect(validateSiteDocument(result).guidedInterview?.audience).toBe("employers");

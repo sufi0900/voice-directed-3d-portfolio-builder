@@ -5,16 +5,24 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import type { SiteCommand } from "@/domain/commands";
 import type { SiteDocument } from "@/domain/site-document";
+import { PublishingEditor } from "./publishing-editor";
+import { deriveImageAlt } from "@/domain/media";
+import { TEMPLATE_CONTRACTS } from "@/domain/template-contracts";
 
-type Props = { document: SiteDocument; execute: (command: SiteCommand) => void; panel: "content" | "design" | "scene"; canUploadMedia?: boolean };
+export type PreviewTarget = { section: string; itemId?: string };
+type Props = { document: SiteDocument; execute: (command: SiteCommand) => void; panel: "content" | "design" | "scene"; canUploadMedia?: boolean; previewTarget?: PreviewTarget; onPreviewTarget?: (target: PreviewTarget) => void };
 
-export function ManualControls({ document, execute, panel, canUploadMedia = false }: Props) {
+export function ManualControls({ document, execute, panel, canUploadMedia = false, previewTarget, onPreviewTarget }: Props) {
   const [newSkill, setNewSkill] = useState("");
-  const [contentSection, setContentSection] = useState("hero");
+  const contentSection = previewTarget?.section ?? "hero";
+  const selectContentSection = (section: string) => {
+    const itemId = section === "site pages" ? document.publishing.pages[0]?.id : section === "blog posts" ? document.publishing.posts[0]?.id : undefined;
+    onPreviewTarget?.({ section, itemId });
+  };
 
   if (panel === "content") return (
     <div className="control-stack">
-      <Select label="Editing" value={contentSection} options={["hero", "about", "experience", "education", "skills", "projects", "contact", "page structure"]} onChange={setContentSection} />
+      <Select label="Editing" value={contentSection} options={["hero", "about", "experience", "education", "skills", "projects", "site pages", "blog posts", "contact", "page structure", "media library"]} onChange={selectContentSection} />
       {contentSection === "hero" && <>
         <BufferedField label="Name" value={document.identity.name} maxLength={60} onCommit={(value) => execute({ type: "identity.set", field: "name", value })} />
         <BufferedField label="Professional role" value={document.identity.role} maxLength={80} onCommit={(value) => execute({ type: "identity.set", field: "role", value })} />
@@ -25,6 +33,7 @@ export function ManualControls({ document, execute, panel, canUploadMedia = fals
         <HeadshotUploader document={document} execute={execute} enabled={canUploadMedia} />
         <BufferedField label="Section heading" value={document.content.about.heading} maxLength={80} onCommit={(value) => execute({ type: "content.setAbout", field: "heading", value })} />
         <BufferedField label="Professional overview" value={document.content.about.body} maxLength={900} multiline allowEmpty onCommit={(value) => execute({ type: "content.setAbout", field: "body", value })} />
+        {document.publishing.pages.some((page) => page.slug === "about") ? <div className="detail-page-ready"><p className="guardrail-note">Your detailed About page is available under Content → Site pages. The homepage keeps this shorter overview for a balanced layout.</p><button type="button" className="secondary-action" onClick={() => { const page = document.publishing.pages.find((entry) => entry.slug === "about"); if (page) onPreviewTarget?.({ section: "site pages", itemId: page.id }); }}>Preview detailed About page</button></div> : <button type="button" className="create-detail-page" onClick={() => execute({ type: "publishing.add", kind: "page", title: "About" })}><Plus size={15} />Create detailed About page</button>}
       </>}
       {contentSection === "experience" && <section className="collection-editor"><header><div><strong>Experience</strong><small>{document.content.experience.length}/8 entries</small></div><button type="button" disabled={document.content.experience.length >= 8} onClick={() => execute({ type: "experience.add" })}><Plus size={15} />Add</button></header>{document.content.experience.map((item) => <article key={item.id}>
         <div className="collection-title"><strong>{item.role}</strong><button type="button" aria-label={`Remove ${item.role}`} onClick={() => execute({ type: "experience.remove", itemId: item.id })}><Trash2 size={14} /></button></div>
@@ -52,13 +61,23 @@ export function ManualControls({ document, execute, panel, canUploadMedia = fals
         <BufferedField label="Period" value={item.period} maxLength={80} allowEmpty onCommit={(value) => execute({ type: "education.update", itemId: item.id, field: "period", value })} />
         <BufferedField label="Details" value={item.summary} maxLength={500} multiline allowEmpty onCommit={(value) => execute({ type: "education.update", itemId: item.id, field: "summary", value })} />
       </article>)}</section>}
-      {contentSection === "projects" && <section className="collection-editor"><header><div><strong>Selected projects</strong><small>{document.content.projects.length}/8 projects</small></div><button type="button" disabled={document.content.projects.length >= 8} onClick={() => execute({ type: "project.add" })}><Plus size={15} />Add</button></header>{document.content.projects.map((item) => <article key={item.id}>
-        <div className="collection-title"><strong>{item.title}</strong><button type="button" aria-label={`Remove ${item.title}`} onClick={() => execute({ type: "project.remove", itemId: item.id })}><Trash2 size={14} /></button></div>
+      {contentSection === "projects" && <section className="collection-editor"><header><div><strong>Project case studies</strong><small>{document.content.projects.length}/8 projects</small></div><button type="button" disabled={document.content.projects.length >= 8} onClick={() => execute({ type: "project.add" })}><Plus size={15} />Add</button></header>{document.content.projects.map((item, index) => <article key={item.id}>
+        <div className="collection-title"><strong>{item.title}</strong><span className="collection-actions"><button type="button" disabled={index === 0} aria-label={`Move ${item.title} up`} onClick={() => execute({ type: "project.move", itemId: item.id, direction: "up" })}><ArrowUp size={14} /></button><button type="button" disabled={index === document.content.projects.length - 1} aria-label={`Move ${item.title} down`} onClick={() => execute({ type: "project.move", itemId: item.id, direction: "down" })}><ArrowDown size={14} /></button><button type="button" aria-label={`Remove ${item.title}`} onClick={() => execute({ type: "project.remove", itemId: item.id })}><Trash2 size={14} /></button></span></div>
         <BufferedField label="Project title" value={item.title} maxLength={100} onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "title", value })} />
         <BufferedField label="Summary" value={item.summary} maxLength={500} multiline allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "summary", value })} />
+        <BufferedField label="Case-study slug" value={item.caseStudySlug} maxLength={80} onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "caseStudySlug", value })} />
+        <BufferedField label="Your role" value={item.role} maxLength={100} allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "role", value })} />
+        <BufferedField label="Period" value={item.period} maxLength={80} allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "period", value })} />
+        <BufferedField label="Challenge" value={item.challenge} maxLength={1200} multiline allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "challenge", value })} />
+        <BufferedField label="Approach" value={item.approach} maxLength={1800} multiline allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "approach", value })} />
+        <BufferedField label="Outcome" value={item.outcome} maxLength={1200} multiline allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "outcome", value })} />
         <BufferedField label="Technologies (comma separated)" value={item.technologies.join(", ")} maxLength={260} allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "technologies", value: value.split(",").map((entry) => entry.trim()).filter(Boolean) })} />
         <BufferedField label="Project URL" value={item.link} maxLength={300} allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "link", value })} />
+        <ProjectGallery project={item} document={document} execute={execute} />
       </article>)}</section>}
+      {contentSection === "media library" && <MediaLibrary document={document} execute={execute} enabled={canUploadMedia} />}
+      {contentSection === "site pages" && <PublishingEditor key="site-pages" document={document} execute={execute} kind="page" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "site pages", itemId })} />}
+      {contentSection === "blog posts" && <PublishingEditor key="blog-posts" document={document} execute={execute} kind="post" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "blog posts", itemId })} />}
       {contentSection === "contact" && <>
         <BufferedField label="Section heading" value={document.content.contact.heading} maxLength={100} onCommit={(value) => execute({ type: "content.setContact", field: "heading", value })} />
         <BufferedField label="Email" value={document.content.contact.email} maxLength={120} allowEmpty onCommit={(value) => execute({ type: "content.setContact", field: "email", value })} />
@@ -72,6 +91,7 @@ export function ManualControls({ document, execute, panel, canUploadMedia = fals
 
   if (panel === "design") return (
     <div className="control-stack">
+      <section className="studio-template-picker" aria-labelledby="template-picker-title"><header><strong id="template-picker-title">Portfolio template</strong><small>Switch presentation without replacing any content.</small></header><div>{TEMPLATE_CONTRACTS.map((template) => <button type="button" key={template.id} className={document.design.template === template.id ? "selected" : ""} aria-pressed={document.design.template === template.id} onClick={() => execute({ type: "design.setTemplate", value: template.id })}><i aria-hidden="true" /><span><strong>{template.name}</strong><small>{template.description}</small></span></button>)}</div></section>
       <Select label="Accent" value={document.design.accent} options={["cyan", "violet", "coral", "lime"]} onChange={(value) => execute({ type: "design.setAccent", value: value as never })} />
       <Select label="Background" value={document.design.background} options={["midnight", "ink", "plum", "cloud"]} onChange={(value) => execute({ type: "design.setBackground", value: value as never })} />
       <Select label="Hero alignment" value={document.design.heroAlignment} options={["left", "center", "right"]} onChange={(value) => execute({ type: "design.setHeroAlignment", value: value as never })} />
@@ -81,6 +101,7 @@ export function ManualControls({ document, execute, panel, canUploadMedia = fals
 
   return (
     <div className="control-stack">
+      <Select label="Scene family" value={document.scene.family} options={["orbital-showcase", "constellation-field"]} onChange={(value) => execute({ type: "scene.setFamily", value: value as never })} />
       <Select label="Scene preset" value={document.scene.preset} options={["cosmic", "architect", "minimal"]} onChange={(value) => execute({ type: "scene.setPreset", value: value as never })} />
       <Select label="Motion" value={document.scene.motion} options={["calm", "dynamic", "still"]} onChange={(value) => execute({ type: "scene.setMotion", value: value as never })} />
       <Field label={`Visual intensity · ${Math.round(document.scene.intensity * 100)}%`}><input type="range" min="0.4" max="1.4" step="0.1" value={document.scene.intensity} onChange={(event) => execute({ type: "scene.setIntensity", value: Number(event.target.value) })} /></Field>
@@ -88,6 +109,34 @@ export function ManualControls({ document, execute, panel, canUploadMedia = fals
       <p className="guardrail-note">The scene is parameter-driven. Voice and manual controls never generate or execute Three.js code.</p>
     </div>
   );
+}
+
+function MediaLibrary({ document, execute, enabled }: { document: SiteDocument; execute: (command: SiteCommand) => void; enabled: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [alt, setAlt] = useState("");
+  async function upload(file: File) {
+    if (document.media.assets.length >= 24) return setError("The media library is full. Remove an unused image first.");
+    setBusy(true); setError("");
+    const generatedAlt = deriveImageAlt(file.name, alt);
+    const data = new FormData(); data.set("image", file); data.set("alt", generatedAlt);
+    try {
+      const response = await fetch(`/api/projects/${document.projectId}/media`, { method: "POST", body: data });
+      const result = await response.json();
+      if (!response.ok) return setError(result.error ?? "Could not upload this image.");
+      execute({ type: "media.addAsset", asset: result.asset }); setAlt("");
+    } catch { setError("The image upload was interrupted."); }
+    finally { setBusy(false); }
+  }
+  return <section className="media-library-editor"><header><div><strong>Reusable media library</strong><small>{document.media.assets.length}/24 images · JPG, PNG, or WebP · 3 MB each</small></div></header>
+    {enabled ? <><div className="media-upload-box"><input aria-label="Image alternative text" placeholder="Optional now—review after upload" value={alt} maxLength={180} onChange={(event) => setAlt(event.target.value)} /><label className="headshot-upload"><input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy || document.media.assets.length >= 24} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.currentTarget.value = ""; }} />{busy ? "Uploading…" : document.media.assets.length >= 24 ? "Library full" : "Upload image"}</label></div><small className="upload-help">Alternative text is optional before upload and editable afterward.</small></> : <p className="guardrail-note">Save this portfolio to your account before uploading project images.</p>}
+    {error && <p className="form-message">{error}</p>}
+    <div className="media-library-grid">{document.media.assets.map((asset) => <article key={asset.id}><div><Image src={asset.url} alt={asset.alt} fill sizes="120px" unoptimized /></div><BufferedField label="Alternative text" value={asset.alt} maxLength={180} onCommit={(value) => execute({ type: "media.updateAsset", mediaId: asset.id, alt: value })} /><button type="button" className="danger-action" onClick={() => execute({ type: "media.removeAsset", mediaId: asset.id })}><Trash2 size={14} />Remove from library</button></article>)}</div>
+  </section>;
+}
+
+function ProjectGallery({ project, document, execute }: { project: SiteDocument["content"]["projects"][number]; document: SiteDocument; execute: (command: SiteCommand) => void }) {
+  return <div className="project-gallery-editor"><strong>Case-study gallery</strong><small>Upload directly from the Media library section or select up to eight existing images here.</small>{document.media.assets.length ? <div>{document.media.assets.map((asset) => { const selected = project.mediaIds.includes(asset.id); return <label key={asset.id} className={selected ? "selected" : ""}><Image src={asset.url} alt="" fill sizes="72px" unoptimized /><input type="checkbox" checked={selected} disabled={!selected && project.mediaIds.length >= 8} onChange={() => execute({ type: selected ? "project.detachMedia" : "project.attachMedia", itemId: project.id, mediaId: asset.id })} /><span>{asset.alt}</span></label>; })}</div> : <p>No images uploaded yet. Use Content → Media library, then return here to attach them.</p>}</div>;
 }
 
 function HeadshotUploader({ document, execute, enabled }: { document: SiteDocument; execute: (command: SiteCommand) => void; enabled: boolean }) {

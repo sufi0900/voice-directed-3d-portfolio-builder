@@ -1,6 +1,6 @@
-fix(v10.1): correct Supabase headshot storage policies
+feat(v13): introduce reusable templates and a second scene family
 
-- grant select permission required by Storage upserts
-- authorize media operations through JWT-owned folder paths
-- make the media policy migration safe to rerun
-- surface an actionable migration error when RLS blocks uploads
+- preserve portfolio content across three responsive template contracts
+- add the Constellation Field scene with governed manual and voice controls
+- redesign expanded Studio editing and responsive media presentation
+- fix Skills level contrast and retain accessibility fallbacks

@@ -1,17 +1,12 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import type { SiteDocument } from "@/domain/site-document";
 import { PortfolioNavigation, PortfolioSections } from "@/features/portfolio/portfolio-sections";
-
-const OrbitalShowcase = dynamic(() => import("@/features/scene/orbital-showcase").then((module) => module.OrbitalShowcase), {
-  ssr: false,
-  loading: () => <div className="scene-loading">Preparing portfolio experience…</div>,
-});
+import { SceneRenderer } from "@/features/scene/scene-renderer";
 const backgroundClass = { midnight: "bg-midnight", ink: "bg-ink", plum: "bg-plum", cloud: "bg-cloud" } as const;
 
-export function PublicPortfolio({ document }: { document: SiteDocument }) {
+export function PublicPortfolio({ document, slug }: { document: SiteDocument; slug: string }) {
   const [reducedMotion, setReducedMotion] = useState(false);
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -21,8 +16,8 @@ export function PublicPortfolio({ document }: { document: SiteDocument }) {
   }, []);
   const focusedSkill = document.skills.find((skill) => skill.id === document.scene.focusedSkill);
   const initials = document.identity.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "VF";
-  return <main className={`studio public-site ${backgroundClass[document.design.background]}`} data-accent={document.design.accent}>
-    <header className="public-nav"><a className="public-identity" href="#"><i>{initials}</i><strong>{document.identity.name}</strong></a><PortfolioNavigation document={document} />{document.content.contact.email ? <a className="public-contact-link" href="#contact">Contact</a> : <span />}</header>
+  return <main className={`studio public-site template-${document.design.template} ${backgroundClass[document.design.background]}`} data-accent={document.design.accent}>
+    <header className="public-nav"><a className="public-identity" href="#"><i>{initials}</i><strong>{document.identity.name}</strong></a><PortfolioNavigation document={document} publicBasePath={`/p/${slug}`} />{document.content.contact.email ? <a className="public-contact-link" href="#contact">Contact</a> : <span />}</header>
     <div className="portfolio-preview" aria-label={`${document.identity.name}'s portfolio`}>
       <section className={`portfolio-hero align-${document.design.heroAlignment}`}>
         <div className="ambient-grid" />
@@ -32,12 +27,12 @@ export function PublicPortfolio({ document }: { document: SiteDocument }) {
         <h1>{document.identity.name}</h1>
         <h2>{document.identity.role}</h2>
         <p className="intro">{document.identity.intro}</p>
-        <div className="hero-actions"><button>View selected work</button><button className="ghost">Start a conversation</button></div>
+        <div className="hero-actions"><a href={`/p/${slug}/projects`}>View selected work</a><a className="ghost" href="#contact">Start a conversation</a></div>
         {focusedSkill && <div className="focus-card"><span>FEATURED CAPABILITY</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}
         </div>
-        <div className="scene-stage"><OrbitalShowcase document={document} execute={() => undefined} reducedMotion={reducedMotion} /></div>
+        <div className="scene-stage"><SceneRenderer document={document} execute={() => undefined} reducedMotion={reducedMotion} /></div>
       </section>
-      <PortfolioSections document={document} />
+      <PortfolioSections document={document} publicBasePath={`/p/${slug}`} />
     </div>
     <footer className="public-footer"><span>Built with Voxfolio</span><small>Published revision {document.revision}</small></footer>
   </main>;

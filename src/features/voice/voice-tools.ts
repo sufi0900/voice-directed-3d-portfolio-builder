@@ -15,9 +15,12 @@ export const createVoiceTools = (document: SiteDocument) => [
   { type: "function", name: "manage_skill", description: "Add, rename, level, or remove a featured skill.", parameters: { type: "object", properties: { action, skill_id: { type: "string", enum: document.skills.map((item) => item.id), description: document.skills.map((item) => `${item.id}: ${item.label}`).join("; ") }, label: { type: "string", maxLength: 32 }, level: { type: "number", minimum: 1, maximum: 5 } }, required: ["action"] } },
   { type: "function", name: "manage_experience", description: "Add, update, or remove experience using only facts stated by the user.", parameters: { type: "object", properties: { action, item_id: idParameter(document.content.experience.map((item) => ({ id: item.id, label: item.role }))), role: { type: "string" }, organization: { type: "string" }, period: { type: "string" }, summary: { type: "string" }, polish_summary: { type: "boolean" } }, required: ["action"] } },
   { type: "function", name: "manage_education", description: "Add, update, or remove education using only facts stated by the user.", parameters: { type: "object", properties: { action, item_id: idParameter(document.content.education.map((item) => ({ id: item.id, label: item.credential }))), credential: { type: "string" }, institution: { type: "string" }, period: { type: "string" }, summary: { type: "string" }, polish_summary: { type: "boolean" } }, required: ["action"] } },
-  { type: "function", name: "manage_project", description: "Add, update, or remove selected projects. Never invent outcomes or technologies.", parameters: { type: "object", properties: { action, item_id: idParameter(document.content.projects.map((item) => ({ id: item.id, label: item.title }))), title: { type: "string" }, summary: { type: "string" }, technologies: { type: "array", items: { type: "string" }, maxItems: 8 }, link: { type: "string" }, polish_summary: { type: "boolean" } }, required: ["action"] } },
+  { type: "function", name: "manage_project", description: "Add, update, remove, or reorder project case studies. Edit only facts supplied by the user; never invent outcomes, metrics, roles, dates, or technologies.", parameters: { type: "object", properties: { action: { type: "string", enum: ["add", "update", "remove", "move"] }, item_id: idParameter(document.content.projects.map((item) => ({ id: item.id, label: item.title }))), title: { type: "string" }, summary: { type: "string" }, role: { type: "string" }, period: { type: "string" }, challenge: { type: "string" }, approach: { type: "string" }, outcome: { type: "string" }, case_study_slug: { type: "string" }, technologies: { type: "array", items: { type: "string" }, maxItems: 8 }, link: { type: "string" }, direction: { type: "string", enum: ["up", "down"] }, polish_summary: { type: "boolean" } }, required: ["action"] } },
+  { type: "function", name: "manage_page_or_post", description: "Create, edit, or remove a standalone site-page or blog-article draft. Blog articles are collected on one Blog page. This tool cannot publish content or upload images; guide the user to use the visible image upload control when media is requested.", parameters: { type: "object", properties: { action, kind: { type: "string", enum: ["page", "post"] }, item_id: idParameter([...document.publishing.pages, ...document.publishing.posts].map((item) => ({ id: item.id, label: item.title }))), title: { type: "string" }, slug: { type: "string" }, seo_title: { type: "string" }, seo_description: { type: "string" }, navigation_label: { type: "string" }, excerpt: { type: "string" }, tags: { type: "array", items: { type: "string" }, maxItems: 8 } }, required: ["action", "kind"] } },
+  { type: "function", name: "manage_content_block", description: "Add, edit, move, or remove a structured text block inside a standalone page or blog-article draft. The page title is H1; content headings may use H2 through H6. Supports paragraphs, quotes, bullet lists, and numbered lists. Images must be uploaded manually. This tool cannot publish.", parameters: { type: "object", properties: { action: { type: "string", enum: ["add", "update", "remove", "move"] }, kind: { type: "string", enum: ["page", "post"] }, item_id: { type: "string" }, block_id: { type: "string" }, block_type: { type: "string", enum: ["heading", "paragraph", "quote", "list", "ordered-list"] }, heading_level: { type: "string", enum: ["h2", "h3", "h4", "h5", "h6"] }, text: { type: "string" }, items: { type: "array", items: { type: "string" }, maxItems: 12 }, direction: { type: "string", enum: ["up", "down"] } }, required: ["action", "kind", "item_id"] } },
   { type: "function", name: "set_section", description: "Show, hide, or move a portfolio section.", parameters: { type: "object", properties: { section: { type: "string", enum: ["about", "experience", "skills", "projects", "contact"] }, visible: { type: "boolean" }, direction: { type: "string", enum: ["up", "down"] } }, required: ["section"] } },
   { type: "function", name: "set_color_theme", description: "Change the approved accent or background theme.", parameters: { type: "object", properties: { accent: { type: "string", enum: ["cyan", "violet", "coral", "lime"] }, background: { type: "string", enum: ["midnight", "ink", "plum", "cloud"] } } } },
+  { type: "function", name: "set_portfolio_template", description: "Switch the reusable presentation template without changing the user's content.", parameters: { type: "object", properties: { template: { type: "string", enum: ["cinematic-orbit", "architectural-grid", "editorial-depth"] } }, required: ["template"] } },
   { type: "function", name: "set_hero_layout", description: "Align the complete Hero content.", parameters: { type: "object", properties: { alignment: { type: "string", enum: ["left", "center", "right"] } }, required: ["alignment"] } },
   { type: "function", name: "set_scene_style", description: "Change the Orbital Showcase appearance or motion.", parameters: { type: "object", properties: { preset: { type: "string", enum: ["cosmic", "architect", "minimal"] }, motion: { type: "string", enum: ["calm", "dynamic", "still"] }, intensity: { type: "number", minimum: 0.4, maximum: 1.4 } } } },
   { type: "function", name: "focus_skill", description: "Focus the 3D scene on an existing skill.", parameters: { type: "object", properties: { skill_id: { type: "string", enum: document.skills.map((item) => item.id) } }, required: ["skill_id"] } },
@@ -51,6 +54,8 @@ export async function runVoiceTool(name: string, rawArguments: unknown, execute:
       case "manage_experience": return manageExperience(values, string, execute, polish);
       case "manage_education": return manageEducation(values, string, execute, polish);
       case "manage_project": return manageProject(values, string, execute, polish);
+      case "manage_page_or_post": return managePublishing(values, string, execute);
+      case "manage_content_block": return manageBlock(values, string, execute);
       case "set_section": {
         const section = string("section") as "about" | "experience" | "skills" | "projects" | "contact";
         if (typeof values.visible === "boolean") execute({ type: "section.setVisible", section, value: values.visible });
@@ -64,6 +69,7 @@ export async function runVoiceTool(name: string, rawArguments: unknown, execute:
         if (string("background")) { execute({ type: "design.setBackground", value: string("background") as never }); changes += 1; }
         return changes ? { ok: true, message: `Applied ${changes} approved colour change${changes === 1 ? "" : "s"}.` } : { ok: false, error: "Specify an approved colour setting." };
       }
+      case "set_portfolio_template": execute({ type: "design.setTemplate", value: string("template") as never }); return { ok: true, message: "Applied the requested template while preserving the portfolio content." };
       case "set_hero_layout": execute({ type: "design.setHeroAlignment", value: string("alignment") as never }); return { ok: true, message: "Updated the Hero alignment." };
       case "set_scene_style": {
         let changes = 0;
@@ -112,13 +118,42 @@ async function manageProject(values: Record<string, unknown>, string: (key: stri
   const summary = await maybePolish(values, string("summary"), "project_summary", polish);
   if (mode === "add") execute({ type: "project.add", title: string("title") || undefined, summary, technologies, link: string("link") });
   else if (mode === "remove") execute({ type: "project.remove", itemId: id });
+  else if (mode === "move") execute({ type: "project.move", itemId: id, direction: string("direction") as "up" | "down" });
   else if (mode === "update") {
     if (typeof values.title === "string") execute({ type: "project.update", itemId: id, field: "title", value: string("title") });
     if (typeof values.summary === "string") execute({ type: "project.update", itemId: id, field: "summary", value: summary });
     if (technologies) execute({ type: "project.update", itemId: id, field: "technologies", value: technologies });
     if (typeof values.link === "string") execute({ type: "project.update", itemId: id, field: "link", value: string("link") });
+    for (const [argument, field] of [["role", "role"], ["period", "period"], ["challenge", "challenge"], ["approach", "approach"], ["outcome", "outcome"], ["case_study_slug", "caseStudySlug"]] as const) {
+      if (typeof values[argument] === "string") execute({ type: "project.update", itemId: id, field, value: string(argument) });
+    }
   } else return { ok: false, error: "Choose add, update, or remove." };
   return { ok: true, message: `Project ${mode} completed.` };
+}
+
+async function managePublishing(values: Record<string, unknown>, string: (key: string) => string, execute: Execute): Promise<VoiceToolResult> {
+  const mode = string("action"), kind = string("kind") as "page" | "post", itemId = string("item_id");
+  if (mode === "add") execute({ type: "publishing.add", kind, title: string("title") || undefined });
+  else if (mode === "remove") execute({ type: "publishing.remove", kind, itemId });
+  else if (mode === "update") {
+    const fields = [["title", "title"], ["slug", "slug"], ["seo_title", "seoTitle"], ["seo_description", "seoDescription"], ["navigation_label", "navigationLabel"], ["excerpt", "excerpt"]] as const;
+    for (const [argument, field] of fields) if (typeof values[argument] === "string") execute({ type: "publishing.update", kind, itemId, field, value: string(argument) });
+    if (Array.isArray(values.tags)) execute({ type: "publishing.update", kind, itemId, field: "tags", value: values.tags.map(String) });
+  } else return { ok: false, error: "Choose add, update, or remove." };
+  return { ok: true, message: `${kind === "page" ? "Page" : "Blog post"} draft ${mode} completed.` };
+}
+
+async function manageBlock(values: Record<string, unknown>, string: (key: string) => string, execute: Execute): Promise<VoiceToolResult> {
+  const mode = string("action"), kind = string("kind") as "page" | "post", itemId = string("item_id"), blockId = string("block_id");
+  if (mode === "add") execute({ type: "block.add", kind, itemId, blockType: string("block_type") as "heading" | "paragraph" | "quote" | "list" | "ordered-list" });
+  else if (mode === "remove") execute({ type: "block.remove", kind, itemId, blockId });
+  else if (mode === "move") execute({ type: "block.move", kind, itemId, blockId, direction: string("direction") as "up" | "down" });
+  else if (mode === "update") {
+    if (typeof values.text === "string") execute({ type: "block.update", kind, itemId, blockId, field: "text", value: string("text") });
+    if (typeof values.heading_level === "string") execute({ type: "block.update", kind, itemId, blockId, field: "headingLevel", value: string("heading_level") });
+    if (Array.isArray(values.items)) execute({ type: "block.update", kind, itemId, blockId, field: "items", value: values.items.map(String) });
+  } else return { ok: false, error: "Choose add, update, remove, or move." };
+  return { ok: true, message: `Structured content block ${mode} completed.` };
 }
 
 async function maybePolish(values: Record<string, unknown>, text: string, target: PolishTarget, polish?: Polish) { return values.polish_summary === true && text && polish ? polish(text, target) : text; }

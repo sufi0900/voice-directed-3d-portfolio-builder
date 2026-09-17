@@ -5,8 +5,41 @@ export const backgroundOptions = ["midnight", "ink", "plum", "cloud"] as const;
 export const alignmentOptions = ["left", "center", "right"] as const;
 export const scenePresetOptions = ["cosmic", "architect", "minimal"] as const;
 export const motionOptions = ["calm", "dynamic", "still"] as const;
+export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth"] as const;
+export const sceneFamilyOptions = ["orbital-showcase", "constellation-field"] as const;
 export const cvFactKindOptions = ["name", "role", "intro", "skill", "education", "experience"] as const;
 export const portfolioSectionOptions = ["about", "experience", "skills", "projects", "contact"] as const;
+export const structuredBlockTypeOptions = ["heading", "paragraph", "quote", "list", "ordered-list", "image"] as const;
+
+const structuredBlockSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(structuredBlockTypeOptions),
+  text: z.string().trim().max(3000).default(""),
+  headingLevel: z.enum(["h2", "h3", "h4", "h5", "h6"]).default("h2"),
+  items: z.array(z.string().trim().min(1).max(300)).max(12).default([]),
+  mediaId: z.string().max(120).default(""),
+});
+
+const publishableBaseSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().trim().min(1).max(120),
+  slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80),
+  seoTitle: z.string().trim().max(70).default(""),
+  seoDescription: z.string().trim().max(170).default(""),
+  coverMediaId: z.string().max(120).default(""),
+  status: z.enum(["draft", "published"]).default("draft"),
+  publishedAt: z.string().nullable().default(null),
+  blocks: z.array(structuredBlockSchema).max(40).default([]),
+});
+
+const customPageSchema = publishableBaseSchema.extend({
+  navigationLabel: z.string().trim().min(1).max(40).default("Page"),
+});
+
+const blogPostSchema = publishableBaseSchema.extend({
+  excerpt: z.string().trim().max(320).default(""),
+  tags: z.array(z.string().trim().min(1).max(32)).max(8).default([]),
+});
 
 export const DEFAULT_PORTFOLIO_CONTENT = {
   order: [...portfolioSectionOptions],
@@ -14,7 +47,7 @@ export const DEFAULT_PORTFOLIO_CONTENT = {
   about: { heading: "About", body: "" },
   experience: [] as Array<{ id: string; role: string; organization: string; period: string; summary: string }>,
   education: [] as Array<{ id: string; credential: string; institution: string; period: string; summary: string }>,
-  projects: [] as Array<{ id: string; title: string; summary: string; technologies: string[]; link: string }>,
+  projects: [] as Array<{ id: string; title: string; summary: string; technologies: string[]; link: string; caseStudySlug: string; role: string; period: string; challenge: string; approach: string; outcome: string; mediaIds: string[] }>,
   contact: { heading: "Let’s build something useful", email: "", location: "", cta: "Start a conversation" },
 };
 
@@ -24,7 +57,20 @@ const portfolioContentSchema = z.object({
   about: z.object({ heading: z.string().trim().min(1).max(80), body: z.string().trim().max(900) }),
   experience: z.array(z.object({ id: z.string().min(1), role: z.string().trim().min(1).max(100), organization: z.string().trim().max(100), period: z.string().trim().max(80), summary: z.string().trim().max(500) })).max(8),
   education: z.array(z.object({ id: z.string().min(1), credential: z.string().trim().min(1).max(140), institution: z.string().trim().max(120), period: z.string().trim().max(80), summary: z.string().trim().max(500) })).max(8).default([]),
-  projects: z.array(z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(100), summary: z.string().trim().max(500), technologies: z.array(z.string().trim().min(1).max(32)).max(8), link: z.union([z.literal(""), z.string().url()]) })).max(8),
+  projects: z.array(z.object({
+    id: z.string().min(1),
+    title: z.string().trim().min(1).max(100),
+    summary: z.string().trim().max(500),
+    technologies: z.array(z.string().trim().min(1).max(32)).max(8),
+    link: z.union([z.literal(""), z.string().url()]),
+    caseStudySlug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80).or(z.literal("")).default(""),
+    role: z.string().trim().max(100).default(""),
+    period: z.string().trim().max(80).default(""),
+    challenge: z.string().trim().max(1200).default(""),
+    approach: z.string().trim().max(1800).default(""),
+    outcome: z.string().trim().max(1200).default(""),
+    mediaIds: z.array(z.string().min(1)).max(8).default([]),
+  })).max(8),
   contact: z.object({ heading: z.string().trim().min(1).max(100), email: z.union([z.literal(""), z.string().email()]), location: z.string().trim().max(100), cta: z.string().trim().min(1).max(60) }),
 });
 
@@ -56,12 +102,13 @@ export const siteDocumentSchema = z.object({
     availability: z.string().trim().min(1).max(80),
   }),
   design: z.object({
+    template: z.enum(templateOptions).default("cinematic-orbit"),
     accent: z.enum(accentOptions),
     background: z.enum(backgroundOptions),
     heroAlignment: z.enum(alignmentOptions),
   }),
   scene: z.object({
-    family: z.literal("orbital-showcase"),
+    family: z.enum(sceneFamilyOptions).default("orbital-showcase"),
     preset: z.enum(scenePresetOptions),
     motion: z.enum(motionOptions),
     intensity: z.number().min(0.4).max(1.4),
@@ -69,7 +116,21 @@ export const siteDocumentSchema = z.object({
   }),
   skills: z.array(z.object({ id: z.string(), label: z.string().min(1).max(32), level: z.number().min(1).max(5) })).min(3).max(8),
   content: portfolioContentSchema.default(DEFAULT_PORTFOLIO_CONTENT),
-  media: z.object({ headshotUrl: z.union([z.literal(""), z.string().url()]), headshotAlt: z.string().trim().max(160) }).default({ headshotUrl: "", headshotAlt: "" }),
+  media: z.object({
+    headshotUrl: z.union([z.literal(""), z.string().url()]),
+    headshotAlt: z.string().trim().max(160),
+    assets: z.array(z.object({
+      id: z.string().min(1),
+      url: z.string().url(),
+      storagePath: z.string().min(1).max(500),
+      alt: z.string().trim().min(1).max(180),
+      createdAt: z.string(),
+    })).max(24).default([]),
+  }).default({ headshotUrl: "", headshotAlt: "", assets: [] }),
+  publishing: z.object({
+    pages: z.array(customPageSchema).max(12).default([]),
+    posts: z.array(blogPostSchema).max(24).default([]),
+  }).default({ pages: [], posts: [] }),
   guidedInterview: z.object({
     goal: z.enum(["win-clients", "showcase-work", "find-role"]),
     audience: z.enum(["clients", "employers", "collaborators"]),
@@ -101,7 +162,7 @@ export const DEFAULT_SITE_DOCUMENT: SiteDocument = {
     intro: "I combine web engineering, search strategy and AI automation to turn complex ideas into useful digital products.",
     availability: "Available for selected projects",
   },
-  design: { accent: "cyan", background: "midnight", heroAlignment: "left" },
+  design: { template: "cinematic-orbit", accent: "cyan", background: "midnight", heroAlignment: "left" },
   scene: { family: "orbital-showcase", preset: "cosmic", motion: "calm", intensity: 0.9, focusedSkill: null },
   skills: [
     { id: "web", label: "Next.js", level: 5 },
@@ -118,11 +179,12 @@ export const DEFAULT_SITE_DOCUMENT: SiteDocument = {
     ],
     education: [],
     projects: [
-      { id: "project-1", title: "Voxfolio", summary: "A voice-directed portfolio builder with governed editing, revision history, and immutable publishing.", technologies: ["Next.js", "Supabase", "Three.js"], link: "" },
+      { id: "project-1", title: "Voxfolio", summary: "A voice-directed portfolio builder with governed editing, revision history, and immutable publishing.", technologies: ["Next.js", "Supabase", "Three.js"], link: "", caseStudySlug: "voxfolio", role: "Product architecture and implementation", period: "2026", challenge: "Turn portfolio creation into a safe, editable workflow without allowing AI or voice commands to bypass validation.", approach: "Built one typed document and command pipeline shared by manual editing, voice tools, revisions, restoration, and publication.", outcome: "Created a reusable foundation for governed portfolio creation and immutable public releases.", mediaIds: [] },
     ],
     contact: { heading: "Let’s build something useful", email: "", location: "Available remotely", cta: "Start a conversation" },
   },
-  media: { headshotUrl: "", headshotAlt: "" },
+  media: { headshotUrl: "", headshotAlt: "", assets: [] },
+  publishing: { pages: [], posts: [] },
 };
 
 export function validateSiteDocument(value: unknown): SiteDocument {

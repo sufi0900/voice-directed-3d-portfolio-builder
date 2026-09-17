@@ -11,8 +11,11 @@ Major versions introduce a completed product capability. Corrections, UX complet
 - V8.2 closes owner-acceptance navigation defects: authenticated Studio identity is preserved and My Projects provides a direct Home path.
 - V9 implements the full portfolio document foundation: About, Experience, Skills, Projects and Contact now share the validated command, revision, recovery and publication pipeline.
 - V10 completes governed voice access across the document, adds fact-preserving AI copy refinement, education onboarding, owner headshots, dynamic favicons and public identity navigation.
+- V11 completes evidence-rich project case studies, reusable media, galleries, ordering and immutable public detail routes.
+- V12 completes governed custom pages and blog publishing with private drafts, structured blocks, SEO metadata and immutable public routes.
+- V13 completes content-preserving reusable templates, a second scene family and a responsive expanded desktop editing workspace.
 
-## Remaining major milestones after V10: five
+## Remaining major milestones after V13: two
 
 ### V9 — Full portfolio document model (implemented)
 
@@ -22,17 +25,17 @@ Expand `SiteDocument` from a hero-led prototype into a complete portfolio struct
 
 Give the governed voice layer parity with manual section controls, refine user-supplied narrative copy without inventing facts, capture optional skills and education at creation, and add safe owner headshots that drive About layouts and favicons. Acceptance: all content types remain validated, undoable, revisioned and publish-safe.
 
-### V11 — Project case studies and media library
+### V11 — Project case studies and media library (implemented; owner acceptance pending)
 
 Add expanded case-study records, outcomes, galleries, safe reusable media assets, ordering and project-detail routes. Acceptance: users can build evidence-rich case studies without losing provenance or breaking templates.
 
-### V12 — Custom pages and blog system
+### V12 — Custom pages and blog system (implemented; owner acceptance pending)
 
 Add user-created blog posts and flexible content pages with drafts, slugs, metadata, structured blocks, publication status and public routes. This is a lightweight portfolio publishing system—not an unrestricted website-code generator. Acceptance: blog/page content has owner-only drafts, explicit publishing and SEO metadata.
 
-### V13 — Template and scene architecture
+### V13 — Template and scene architecture (implemented; owner acceptance pending)
 
-Convert layouts into section-aware reusable template contracts; add the second reusable 3D scene family and additional complete templates. Separate content from presentation so one portfolio can switch templates safely. Acceptance: template switching preserves content and accessibility.
+Converted layouts into section-aware reusable template contracts, added Constellation Field as the second reusable 3D scene family, and shipped three complete presentation variants. Content and presentation are separate, and automated tests verify that template switching preserves portfolio content. Acceptance: owner cross-device review confirms every template remains accessible and responsive.
 
 ### V14 — Production readiness
 
@@ -44,4 +47,4 @@ Run end-to-end regression, threat review, data-retention review, onboarding usab
 
 ## Architecture rationale
 
-The current work is intentionally reusable infrastructure. The validated document is the content contract; commands are the mutation contract; revisions are the recovery contract; publication snapshots are the delivery contract; templates and scenes are renderers. V11–V13 extend these contracts rather than rebuilding the application. New sections and templates must use the same validation, ownership, revision, restoration and publishing boundaries already proven by the foundation.
+The current work is intentionally reusable infrastructure. The validated document is the content contract; commands are the mutation contract; revisions are the recovery contract; publication snapshots are the delivery contract; templates and scenes are renderers. V13 extends these contracts rather than rebuilding the application. New layouts and scenes must use the same validation, ownership, revision, restoration and publishing boundaries already proven by the foundation.

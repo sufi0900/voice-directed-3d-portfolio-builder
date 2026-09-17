@@ -14,6 +14,26 @@ describe("site command bus", () => {
     expect(() => applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "design.setAccent", value: "random-orange" })).toThrow();
   });
 
+  it("switches reusable templates without changing portfolio content", () => {
+    const contentBefore = structuredClone(DEFAULT_SITE_DOCUMENT.content);
+    const identityBefore = structuredClone(DEFAULT_SITE_DOCUMENT.identity);
+    const switched = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "design.setTemplate", value: "architectural-grid" });
+    expect(switched.design.template).toBe("architectural-grid");
+    expect(switched.scene.family).toBe("constellation-field");
+    expect(switched.content).toEqual(contentBefore);
+    expect(switched.identity).toEqual(identityBefore);
+    expect(switched.revision).toBe(1);
+  });
+
+  it("upgrades pre-V13 presentation data with compatible defaults", () => {
+    const legacy = structuredClone(DEFAULT_SITE_DOCUMENT) as unknown as { design: Record<string, unknown>; scene: Record<string, unknown> };
+    delete legacy.design.template;
+    delete legacy.scene.family;
+    const upgraded = validateSiteDocument(legacy);
+    expect(upgraded.design.template).toBe("cinematic-orbit");
+    expect(upgraded.scene.family).toBe("orbital-showcase");
+  });
+
   it("uses the same reversible reducer path for voice commands", () => {
     const changed = studioReducer(initialStudioState, {
       type: "execute", source: "voice", command: { type: "scene.setPreset", value: "architect" },
@@ -51,7 +71,7 @@ describe("site command bus", () => {
     expect(upgraded.content.order).toEqual(["about", "experience", "skills", "projects", "contact"]);
     expect(upgraded.content.visibility.projects).toBe(true);
     expect(upgraded.content.education).toEqual([]);
-    expect(upgraded.media).toEqual({ headshotUrl: "", headshotAlt: "" });
+    expect(upgraded.media).toEqual({ headshotUrl: "", headshotAlt: "", assets: [] });
   });
 
   it("edits and reorders full portfolio sections through validated commands", () => {
@@ -81,5 +101,81 @@ describe("site command bus", () => {
     const withImage = applySiteCommand(educated, { type: "media.setHeadshot", url: "https://example.com/headshot.webp", alt: "Sufian Mustafa headshot" });
     expect(educated.content.education.at(-1)).toMatchObject({ credential: "MCS", institution: "AWKUM" });
     expect(withImage.media.headshotUrl).toBe("https://example.com/headshot.webp");
+  });
+
+  it("builds an ordered case study and reuses governed media", () => {
+    const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "project.add", title: "Search Growth System" });
+    const project = added.content.projects.at(-1)!;
+    expect(project.caseStudySlug).toBe("search-growth-system");
+    const detailed = applySiteCommand(added, { type: "project.update", itemId: project.id, field: "outcome", value: "A clearer, measurable publishing workflow." });
+    const withAsset = applySiteCommand(detailed, { type: "media.addAsset", asset: { id: "asset-1", url: "https://example.com/result.webp", storagePath: "owner/project/library/result.webp", alt: "Search performance dashboard", createdAt: new Date(0).toISOString() } });
+    const attached = applySiteCommand(withAsset, { type: "project.attachMedia", itemId: project.id, mediaId: "asset-1" });
+    expect(attached.content.projects.at(-1)?.mediaIds).toEqual(["asset-1"]);
+    const removed = applySiteCommand(attached, { type: "media.removeAsset", mediaId: "asset-1" });
+    expect(removed.media.assets).toEqual([]);
+    expect(removed.content.projects.at(-1)?.mediaIds).toEqual([]);
+  });
+
+  it("prevents duplicate public case-study slugs", () => {
+    const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "project.add", title: "Second project" });
+    const project = added.content.projects.at(-1)!;
+    expect(() => applySiteCommand(added, { type: "project.update", itemId: project.id, field: "caseStudySlug", value: "voxfolio" })).toThrow("unique slug");
+  });
+
+  it("upgrades legacy documents with an empty V12 publishing workspace", () => {
+    const legacy = structuredClone(DEFAULT_SITE_DOCUMENT) as unknown as Record<string, unknown>;
+    delete legacy.publishing;
+    const upgraded = validateSiteDocument(legacy);
+    expect(upgraded.publishing).toEqual({ pages: [], posts: [] });
+  });
+
+  it("creates a structured page draft and requires content before publishing", () => {
+    const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "publishing.add", kind: "page", title: "Services" });
+    const page = added.publishing.pages[0];
+    expect(page).toMatchObject({ title: "Services", slug: "services", status: "draft" });
+    expect(() => applySiteCommand(added, { type: "publishing.setStatus", kind: "page", itemId: page.id, status: "published" })).toThrow("content block");
+    const withBlock = applySiteCommand(added, { type: "block.add", kind: "page", itemId: page.id, blockType: "paragraph" });
+    const block = withBlock.publishing.pages[0].blocks[0];
+    const written = applySiteCommand(withBlock, { type: "block.update", kind: "page", itemId: page.id, blockId: block.id, field: "text", value: "A focused portfolio service." });
+    const published = applySiteCommand(written, { type: "publishing.setStatus", kind: "page", itemId: page.id, status: "published" });
+    expect(published.publishing.pages[0].status).toBe("published");
+    expect(published.publishing.pages[0].publishedAt).not.toBeNull();
+  });
+
+  it("keeps page and post slugs unique within their public routes", () => {
+    const first = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "publishing.add", kind: "post", title: "Design systems" });
+    const second = applySiteCommand(first, { type: "publishing.add", kind: "post", title: "Second article" });
+    expect(() => applySiteCommand(second, { type: "publishing.update", kind: "post", itemId: second.publishing.posts[1].id, field: "slug", value: "design-systems" })).toThrow("unique slug");
+  });
+
+  it("supports numbered-list blocks through the governed content model", () => {
+    const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "publishing.add", kind: "post", title: "A repeatable workflow" });
+    const post = added.publishing.posts[0];
+    const withList = applySiteCommand(added, { type: "block.add", kind: "post", itemId: post.id, blockType: "ordered-list" });
+    const block = withList.publishing.posts[0].blocks[0];
+    const updated = applySiteCommand(withList, { type: "block.update", kind: "post", itemId: post.id, blockId: block.id, field: "items", value: ["Research", "Draft", "Review"] });
+    expect(updated.publishing.posts[0].blocks[0]).toMatchObject({ type: "ordered-list", items: ["Research", "Draft", "Review"] });
+  });
+
+  it("inserts blocks at an inline position and supports direct drag reordering", () => {
+    const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "publishing.add", kind: "page", title: "About" });
+    const page = added.publishing.pages[0];
+    const first = applySiteCommand(added, { type: "block.add", kind: "page", itemId: page.id, blockType: "heading" });
+    const heading = first.publishing.pages[0].blocks[0];
+    const second = applySiteCommand(first, { type: "block.add", kind: "page", itemId: page.id, blockType: "paragraph", afterBlockId: heading.id });
+    const paragraph = second.publishing.pages[0].blocks[1];
+    const third = applySiteCommand(second, { type: "block.add", kind: "page", itemId: page.id, blockType: "quote", afterBlockId: heading.id });
+    expect(third.publishing.pages[0].blocks.map((block) => block.type)).toEqual(["heading", "quote", "paragraph"]);
+    const moved = applySiteCommand(third, { type: "block.moveTo", kind: "page", itemId: page.id, blockId: paragraph.id, targetIndex: 0 });
+    expect(moved.publishing.pages[0].blocks.map((block) => block.type)).toEqual(["paragraph", "heading", "quote"]);
+  });
+
+  it("supports an H2 through H6 hierarchy below the page-title H1", () => {
+    const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "publishing.add", kind: "post", title: "Heading hierarchy" });
+    const post = added.publishing.posts[0];
+    const withHeading = applySiteCommand(added, { type: "block.add", kind: "post", itemId: post.id, blockType: "heading" });
+    const heading = withHeading.publishing.posts[0].blocks[0];
+    const updated = applySiteCommand(withHeading, { type: "block.update", kind: "post", itemId: post.id, blockId: heading.id, field: "headingLevel", value: "h4" });
+    expect(updated.publishing.posts[0].blocks[0].headingLevel).toBe("h4");
   });
 });

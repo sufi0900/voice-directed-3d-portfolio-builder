@@ -23,5 +23,5 @@ export default async function PublicPortfolioPage({ params }: { params: Promise<
   const { slug } = await params;
   const item = await publication(slug);
   if (!item) notFound();
-  return <PublicPortfolio document={item.document} />;
+  return <PublicPortfolio document={item.document} slug={slug} />;
 }

@@ -61,7 +61,7 @@ export function applyGuidedInterview(document: SiteDocument, interview: GuidedIn
   return {
     ...document,
     identity: { ...document.identity, availability },
-    design: { accent: toneDesign.accent, background: toneDesign.background, heroAlignment: toneDesign.heroAlignment },
+    design: { ...document.design, accent: toneDesign.accent, background: toneDesign.background, heroAlignment: toneDesign.heroAlignment },
     scene: {
       ...document.scene,
       preset: toneDesign.preset,

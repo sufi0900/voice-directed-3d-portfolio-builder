@@ -1,134 +1,101 @@
-# Milestone 10.1 — Storage policy correction
+# Milestone 13 — Reusable templates and scene architecture
+
+## V13 completed capability
+
+- Added three section-aware presentation contracts: Cinematic Orbit, Architectural Grid and Editorial Depth.
+- Template switching changes only approved presentation tokens and never replaces identity, About, experience, education, skills, projects, media, pages or posts.
+- Added Constellation Field as a second reusable React Three Fiber scene family alongside Orbital Showcase.
+- Added Studio controls and governed voice access for template selection, plus direct manual scene-family selection.
+- Kept one active WebGL canvas per rendered portfolio, with the existing static fallback, mobile behavior and reduced-motion protection.
+- Added compatible schema defaults so portfolios created before V13 open as Cinematic Orbit with Orbital Showcase.
+- Rebuilt expanded Studio editing as a responsive desktop workspace with constrained reading width, two-column forms, larger headshot treatment, adaptive collections and a multi-column media gallery.
+- Corrected Skills level option contrast across native dark select menus.
+- Added automated coverage for legacy V13 upgrades, content-preserving template switching and governed voice template changes.
+
+## V13 owner acceptance gate
+
+- Expand the Content editor on desktop and confirm About media, forms, collections, pages, posts and Media Library use the adaptive desktop layout.
+- Collapse the editor and confirm the original three-panel Studio returns without losing the selected section or draft changes.
+- Switch through all three templates and confirm every content record, image and publication draft remains unchanged.
+- Switch between Orbital Showcase and Constellation Field and verify skill selection works in both scenes.
+- Test Skills levels 1–5 and confirm every option remains legible when open and selected.
+- Check mobile layout, keyboard focus, reduced-motion mode and the static WebGL failure fallback.
+- Publish each template once and confirm the Studio preview and immutable public portfolio use the same presentation contract.
+
+## V12.4 deterministic preview routing and advanced content composition
+
+- Corrected section navigation with scroll-container geometry instead of nested `offsetTop` values, eliminating the one-section-behind behavior shown in the supplied recording.
+- Made the preview target the single source of truth for homepage sections, Site Pages and Blog Posts, preventing stale selections from reopening the wrong standalone preview.
+- Switched standalone-to-homepage transitions to an immediate layout-phase route change so the Hero no longer flashes before the requested section appears.
+- Added desktop drag-and-drop and touch/pen long-press block reordering, while retaining accessible move buttons as a keyboard-friendly fallback.
+- Added an inline insertion control after every content block, allowing headings, paragraphs, quotes, bullet lists, numbered lists and images to be inserted in context.
+- Preserved the page/article title as the single H1 and added explicit H2–H6 selection for structured heading blocks.
+- Added visible SEO title and description guidance, live character counts, a canonical-path preview and a search-result preview.
+- Extended cinematic depth across homepage sections and standalone public content with lightweight CSS layers while retaining the single Hero WebGL scene, reduced-motion behavior and mobile fallbacks.
+- Extended voice block editing to understand H2–H6 choices without granting voice permission to upload files or publish content.
+- Added regression coverage for nested preview geometry, inline insertion, direct block moves and semantic heading levels.
+
+## V12.3 bounded Studio preview and navigation
+
+- Converted the Studio live canvas into a viewport-bounded scroll container so section selection never scrolls the browser window away from the editor.
+- Replaced viewport-level `scrollIntoView()` behavior with container-relative, reduced-motion-aware scrolling.
+- Synchronized canvas navigation and the Editing selector in both directions across homepage sections, Site Page drafts and Blog Post drafts.
+- Added working Hero calls to action inside the live preview for Projects and Contact.
+- Added a draft-aware detailed About button in the homepage preview and a direct preview action in the About editor.
+- Added an explicit return-to-homepage control for standalone Site Page and Blog draft previews.
+- Preserved full-page Preview mode while keeping desktop editor, canvas and Voice Assistant panels independently scrollable.
+- Added regression coverage for About, Education and standalone-page preview transitions.
+
+## V12.2 publication and media stabilization
+
+- Split inline rich-text rendering from the client-only editor so public Site Page and Blog routes render safely on the server.
+- Restored cover images in the selected-item Studio preview and in immutable published pages/articles.
+- Simplified heading blocks to a normal text field; formatting controls remain available for paragraphs, quotes and list items.
+- Made image upload the first action: alternative text can be added before or edited after upload, while a safe filename-derived fallback prevents inaccessible blank output.
+- Added clearer item-publication guidance and direct route explanations for the Blog index, Projects index and detailed Site Pages such as About.
+- Added public navigation for every included Site Page, plus conditional Blog and Projects links.
+- Added regression tests for server-safe inline formatting and upload-first alternative-text derivation.
+
+## V12.1 usability completion
+
+- Replaced the ambiguous Custom Pages/Page/Post switch with separate task-focused Site Pages and Blog Posts editors.
+- Clarified that Site Pages are standalone long-form pages, while all articles are collected automatically on one Blog index.
+- Added direct cover and content-image uploads at the point of use, with required alternative text and optional reuse of existing images.
+- Added safe inline bold, italic, underline and `https://` hyperlink formatting plus bullet and numbered lists.
+- Added live draft previews for the selected Site Page or Blog article and synchronized homepage-section preview scrolling.
+- Added a dedicated public Projects index while limiting the published homepage to four featured project cards.
+- Added a one-click detailed About page starter; a published Site Page with the `/about` slug is linked from the concise homepage About section.
+- Added editor expansion, a hideable Voice Assistant, mouse-driven side-panel resizing and responsive Preview/Exit Preview controls.
+- Updated voice definitions for Site Pages, Blog articles and numbered lists; image upload remains an explicit manual action.
 
 ## Completed
 
-1. Headshot upserts now have the Supabase Storage `SELECT`, `INSERT`, `UPDATE` and `DELETE` policies required for owner-folder replacements.
-2. Storage policies use the authenticated JWT subject and path ownership rather than mutable object ownership metadata.
-3. Media migrations are idempotent and can safely replace the original V10 policies.
-4. Upload failures now identify the exact recovery migration instead of exposing the raw PostgreSQL RLS error.
+1. Every portfolio now has a backward-compatible publishing workspace for up to 12 custom pages and 24 blog posts.
+2. Pages and posts begin as private drafts and require an explicit owner action before inclusion in the next site publication.
+3. Each item has a collision-safe public slug, SEO title, SEO description, optional reusable cover image and publication timestamp.
+4. Blog posts also support excerpts and up to eight tags; custom pages have owner-controlled navigation labels.
+5. A bounded structured editor supports headings, paragraphs, quotes, lists and reusable media blocks without accepting arbitrary HTML or executable code.
+6. Blocks can be added, edited, reordered and removed through the same typed command bus used by manual editing, undo, revision history and recovery.
+7. Published custom pages render at `/p/[portfolio-slug]/pages/[page-slug]`.
+8. Published blog indexes and articles render at `/p/[portfolio-slug]/blog` and `/p/[portfolio-slug]/blog/[post-slug]`.
+9. Public routes read only the current immutable publication snapshot and return 404 for drafts, missing items or unpublished collections.
+10. Portfolio navigation automatically includes published page labels and the Blog link when the snapshot contains published posts.
+11. Voice tools may create and edit page/post drafts and text blocks but cannot publish, upload media, inject code or bypass validation.
+12. Existing V11 documents receive empty page/post collections through schema defaults; no database migration is required.
+13. V12-specific tests cover legacy upgrades, explicit publishing, structured content, numbered lists, semantic heading levels, direct reordering, unique slugs and voice publication boundaries.
 
-## V10 capability retained
+## No new SQL migration
 
-1. The voice assistant can edit Hero, About, Skills, Experience, Education, Projects, Contact, section structure, design and the 3D scene.
-2. Every voice mutation uses the same validated commands, revisions, undo/redo and cloud autosave as manual controls.
-3. Raw narrative copy can be refined through a server-only OpenAI Responses request with `store: false` before the validated command is applied.
-4. AI refinement is fact-preserving: it is instructed not to add metrics, employers, dates, credentials, achievements or skills.
-5. Guided Creation includes optional comma-separated skills and line-separated education credentials.
-6. Approved CV skills and education facts populate the same portfolio fields, keeping onboarding sources synchronized.
-7. Education has complete manual and voice add, update and remove controls and renders with the professional journey.
-8. Owners can upload a validated JPG, PNG or WebP headshot up to 3 MB into an owner-scoped Supabase Storage path.
-9. The About section renders uploaded headshots with responsive cropping, alignment, spacing and mobile layout.
-10. Studio preview uses the headshot as its favicon, with an initial-based fallback; published metadata uses the published headshot.
-11. Public navigation identifies the portfolio owner by initials and name, exposes section navigation and removes editor/publishing labels.
-12. Legacy V9 documents receive default education and media fields without losing existing content.
+V12 stores page and blog data inside the validated project document and immutable publication snapshots. It reuses the existing owner-only project and revision policies plus the V10.1 media bucket policies.
 
-## V9 foundation retained
+## Owner acceptance gate
 
-1. V8.2 preserves authenticated state in every saved-project Studio and replaces the incorrect Sign In action with My Projects plus an account indicator.
-2. My Projects provides a direct Home navigation path while preserving sign-out and account context.
-3. The validated document now includes ordered, visibility-controlled About, Experience, Skills, Projects and Contact sections.
-4. Existing V1–V8 documents are upgraded automatically through schema defaults; no SQL migration is required.
-5. Every new content mutation uses the same typed command bus, revision history, undo/redo, autosave and immutable publication boundaries.
-6. Owners can add, edit and remove repeatable experience and project records within safe limits.
-7. Owners can reorder or hide page sections without deleting their content.
-8. Studio preview and public snapshots render the same reusable section components and anchored navigation.
-9. Empty draft collections have editor guidance while empty public collections remain hidden.
-10. Responsive layouts cover navigation, section headings, capability cards, experience timelines, project cards and contact calls to action.
-
-## Earlier foundation retained
-
-1. A strict `SiteDocument` schema is the single source of truth.
-2. Manual controls dispatch typed commands rather than modifying components directly.
-3. Voice function tools dispatch the same commands with the source recorded as `voice`.
-4. Every valid change creates a revision and can be undone or redone.
-5. The current site document persists locally and safely falls back if stored data is invalid.
-6. `OrbitalShowcase` is reusable and controlled entirely through document parameters.
-7. The scene supports approved palettes, presets, motion modes, intensity and skill focus.
-8. Reduced-motion preferences and WebGL rendering failures have fallback behavior.
-9. AssemblyAI uses a server-only key and single-use browser token.
-10. Voice capture, spoken responses, transcripts, interruption, stop and client-side tools are connected.
-11. Cleanly ended AssemblyAI sessions are submitted for provider-side deletion.
-12. TypeScript, ESLint, seven unit tests and the production build pass.
-13. Email accounts and session refresh are integrated through Supabase Auth.
-14. Projects and immutable revisions persist in PostgreSQL under owner-only RLS policies.
-15. Guided Creation and Choose a Template both produce the same validated document type.
-16. Three curated 3D foundations and one restrained 2D foundation are available.
-17. Saved projects reopen in the existing manual and voice editor.
-18. Optimistic revision checks prevent an older tab from silently overwriting newer work.
-19. Authenticated users can upload PDF, DOCX, or TXT CVs up to 5 MB.
-20. CV files are parsed in memory and the original file is not persisted.
-21. Deterministic extraction proposes identity, role, summary and skill candidates without inventing missing facts.
-22. Every candidate remains unapproved until the user checks it and may be corrected before approval.
-23. Guided Creation uses only approved CV facts and preserves their source excerpts in the saved document.
-24. Invalid, oversized, disguised, or unreadable documents fail safely.
-25. TypeScript, ESLint, twelve unit tests and the production build pass.
-26. OpenAI-enhanced extraction is an explicit user choice and runs only on the server.
-27. PDF inputs include page imagery so the model can interpret visual hierarchy and multi-column layouts.
-28. Structured Outputs constrain AI results to supported fact types, confidence and source excerpts.
-29. Locally extracted text is used to reject ungrounded AI excerpts before candidates reach the browser.
-30. AI and deterministic candidates are reconciled without duplicating singleton identity fields.
-31. Missing keys, timeouts, rate limits, provider errors, invalid output and ungrounded output recover automatically to local extraction.
-32. Scanned PDFs can recover through visual extraction, with low-confidence facts requiring human approval.
-33. The UI states which extraction path completed and never pre-approves a model-generated fact.
-34. TypeScript, ESLint and the production build pass.
-35. Text fields preserve spaces while editing and commit only on blur or after five idle seconds.
-36. Duplicate text commits are ignored, preventing one revision per keystroke.
-37. Featured skills can be added, renamed, leveled and removed within safe bounds.
-38. Project names are required during creation and can be renamed from the dashboard.
-39. AI fallback notices identify configuration, authentication, quota, model/request, timeout and response failures.
-40. Text-based CVs use a faster semantic-analysis path; scanned CVs retain visual file recovery.
-41. Alternate summary headings such as Career Profile, Professional Overview and Introduction are supported locally.
-42. Typography, focus states and extraction progress feedback have been upgraded site-wide.
-43. Nineteen automated tests pass across commands, CV ingestion, AI recovery, templates and voice tools.
-44. AI CV analysis uses low reasoning effort, bounded output, reduced input context and configurable 60/90-second processing limits.
-45. Guided Creation now includes a five-turn design interview covering goal, audience, tone, motion and emphasis.
-46. Every interview must be complete before project creation and is validated again on the server.
-47. Interview answers configure only governed presentation fields and never rewrite CV-grounded professional claims.
-48. Approved CV fact count and safety boundaries remain visible throughout the interview.
-49. Interview progress, previous/next navigation and direct question navigation are keyboard accessible.
-50. The completed interview is stored in the validated document so its starting rationale remains recoverable.
-51. Owners can publish only a fully saved server revision through an explicit confirmation dialog.
-52. Every publication stores an immutable document snapshot and its exact revision number.
-53. Later Studio edits remain private drafts until the owner publishes again.
-54. Public portfolios render at `/p/[slug]` without exposing editor controls or owner data.
-55. Live slugs are unique, validated and protected against unsafe URL characters.
-56. Republishing supersedes the previous snapshot without mutating its historical record.
-57. Owners can copy the public URL, inspect the live revision and unpublish safely.
-58. Anonymous database access is restricted to live publication snapshots under RLS.
-59. Studio provides a visual, owner-only timeline of the latest fifty immutable revisions.
-60. Every history entry shows its source, timestamp, identity, visual system, scene mode and skill count.
-61. Current and publicly live revisions are clearly distinguished in the timeline.
-62. Restoring copies the selected snapshot into a new latest revision rather than deleting later work.
-63. Restore requests require the exact current server revision and reject cross-tab conflicts.
-64. Restoration does not alter the public portfolio until the owner explicitly republishes.
-65. Revision responses expose compact presentation summaries without returning stored CV provenance.
-66. Anonymous visitors can customize the homepage demo before authentication.
-67. Save and publish routes guest drafts through authentication and a validated cloud-claim step.
-68. Authenticated visitors with existing projects open their latest project directly from the homepage.
-69. Authenticated visitors can reach My Projects from the homepage and Studio header.
-70. Project cards separate Edit Studio, View Live and Rename actions and show the exact published slug and revision.
-71. Post-authentication destinations are allowlisted as internal paths to prevent open redirects.
-72. Voxfolio now provides a generated application icon and installable web manifest through Next.js metadata conventions.
-73. The committed roadmap formalizes major/sub-version acceptance rules and now records five remaining milestones after V10.
-
-## Manual verification requiring the owner’s environment
-
-- Add the real AssemblyAI key to `.env.local`.
-- Grant microphone permission in Chrome or Edge on localhost.
-- Run each command in the README and confirm spoken output, visible transcript and scene change.
-- Confirm the session disappears from the AssemblyAI session list after ending cleanly.
-- Upload one real PDF or DOCX CV through Guided Creation.
-- Correct and approve selected candidates, create a project, and confirm they persist after reload.
-- Confirm an unchecked candidate does not enter the created portfolio.
-- Add `OPENAI_API_KEY` locally, enable AI-enhanced extraction and test at least three visually different CV templates.
-- Temporarily use an invalid OpenAI key and confirm the same upload recovers to local extraction with a visible notice.
-
-## V10 owner acceptance gate
-
-- Run `004_portfolio_media.sql`, upload a headshot and verify it survives reload and publication.
-- Confirm Studio and published browser tabs use the headshot or initial-based favicon.
-- Use voice to edit every section type, then test undo and revision restore.
-- Dictate rough About and Introduction copy and confirm OpenAI improves wording without adding facts.
-- Create a new project with optional skills and education and confirm both appear in Studio and the published page.
-- Confirm the public header shows owner identity and navigation with no Publish Portfolio/editor wording.
-- Record corrections as V10.1/V10.2; begin V11 only after this gate passes.
+- Create one custom page and one blog post; confirm both remain absent from the public site while in Draft status.
+- Add and reorder every block type, upload an image directly, edit its alternative text and reload Studio to verify persistence.
+- Verify duplicate page/post slugs are rejected and invalid slugs are normalized safely.
+- Publish each item in Studio, then publish the portfolio revision; confirm the new public routes and navigation links work in a private browser.
+- Change a published article without republishing the portfolio and confirm the live snapshot remains unchanged.
+- Return an item to Draft, publish the portfolio again and confirm its public route returns 404.
+- Confirm article/page title, description and cover image appear in page metadata.
+- Ask voice to draft and edit content, then confirm voice cannot publish it.
+- Record any remaining corrections as V12.x; begin V13 only after this gate passes.
