@@ -7,34 +7,31 @@ import { PublicPortfolio } from "@/features/public/public-portfolio";
 import { PublicProjectsIndex } from "@/features/public/public-projects-index";
 import { PublicCaseStudy } from "@/features/public/public-case-study";
 import { PublicBlogIndex, PublicContentPage } from "@/features/public/public-content";
+import { OpportunityFeedback } from "@/features/public/opportunity-feedback";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { hashShareToken, validShareToken } from "@/domain/opportunity-share";
 
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ token: string; path?: string[] }> };
-
 const sharedDocument = cache(async (token: string) => {
   if (!validShareToken(token)) return null;
-  const hash = hashShareToken(token);
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.rpc("read_opportunity_share", { p_hash: hash });
+  const { data, error } = await supabase.rpc("read_opportunity_share", { p_hash: hashShareToken(token) });
   if (error || !data?.[0]) return null;
   const document = validateSiteDocument(data[0].document);
   if (document.opportunity.status === "canonical" || document.opportunity.visibility !== "shared") return null;
   return { ...document, revision: data[0].revision };
 });
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { token } = await params;
   return { title: await sharedDocument(token) ? "Private opportunity portfolio — Voxfolio" : "Share unavailable — Voxfolio", robots: { index: false, follow: false, noarchive: true }, referrer: "no-referrer" };
 }
-
 export default async function SharedOpportunityPage({ params }: Props) {
   const { token, path = [] } = await params;
   const document = await sharedDocument(token);
   if (!document) notFound();
   const basePath = `/s/${token}`;
-  if (!path.length) return <PublicPortfolio document={document} slug="" basePath={basePath} />;
+  if (!path.length) return <><PublicPortfolio document={document} slug="" basePath={basePath} /><OpportunityFeedback token={token} /></>;
   if (path[0] === "projects") {
     if (path.length === 1) return <PublicProjectsIndex document={document} portfolioSlug="" basePath={basePath} />;
     const project = projectsForPresentation(document).find((item) => item.caseStudySlug === path[1]);

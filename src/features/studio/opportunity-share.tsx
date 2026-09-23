@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from "react";
 import type { SiteDocument } from "@/domain/site-document";
+import { OpportunityAcceptance } from "./opportunity-acceptance";
 
-type Share = { id: string; expires_at: string; revoked_at: string | null; openCount?: number };
+type Share = { id: string; created_at: string; expires_at: string; revoked_at: string | null; openCount?: number };
+
+function shareState(share: Share) {
+  if (share.revoked_at) return "Revoked";
+  if (new Date(share.expires_at).getTime() <= Date.now()) return "Expired";
+  return "Active";
+}
 
 export function OpportunityShare({ document, publishedDocument }: { document: SiteDocument; publishedDocument?: SiteDocument }) {
   const [shares, setShares] = useState<Share[]>([]);
@@ -11,12 +18,20 @@ export function OpportunityShare({ document, publishedDocument }: { document: Si
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const publishedShared = publishedDocument?.opportunity.visibility === "shared";
+
   useEffect(() => {
     if (!publishedShared) return;
     let live = true;
-    fetch(`/api/projects/${document.projectId}/shares`).then((response) => response.json()).then((data) => { if (live) setShares(data.shares ?? []); }).catch(() => undefined);
+    fetch(`/api/projects/${document.projectId}/shares`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? "Could not load share links.");
+        if (live) setShares(data.shares ?? []);
+      })
+      .catch((cause) => { if (live) setError(cause instanceof Error ? cause.message : "Could not load share links."); });
     return () => { live = false; };
   }, [document.projectId, publishedShared]);
+
   async function create() {
     setBusy(true); setError("");
     try {
@@ -28,6 +43,13 @@ export function OpportunityShare({ document, publishedDocument }: { document: Si
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not create a link."); }
     finally { setBusy(false); }
   }
+
+  async function copyCreatedUrl() {
+    if (!createdUrl) return;
+    try { await navigator.clipboard.writeText(createdUrl); }
+    catch { setError("Copy failed. Select and copy the link manually."); }
+  }
+
   async function revoke(id: string) {
     setBusy(true); setError("");
     try {
@@ -39,6 +61,19 @@ export function OpportunityShare({ document, publishedDocument }: { document: Si
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not revoke the link."); }
     finally { setBusy(false); }
   }
-  if (document.opportunity.visibility !== "shared") return null;
-  return <section className="opportunity-planner" aria-label="Private opportunity links"><header><strong>Private share links</strong><small>Publish this opportunity as Shared first. Links expire after seven days and can be revoked at any time.</small></header>{!publishedShared && <p>Publish the latest Shared version to enable private links.</p>}<button className="secondary-action" type="button" disabled={!publishedShared || busy} onClick={create}>{busy ? "Working…" : "Create private link"}</button>{createdUrl && <div className="opportunity-share-url"><input aria-label="New private share URL" readOnly value={createdUrl} onFocus={(event) => event.target.select()} /><button type="button" onClick={() => void navigator.clipboard.writeText(createdUrl)}>Copy</button><small>Copy this URL now; the token cannot be recovered later.</small></div>}{error && <p role="alert" className="field-error">{error}</p>}{shares.filter((share) => !share.revoked_at && new Date(share.expires_at).getTime() > Date.now()).map((share) => <div className="opportunity-share-row" key={share.id}><small>Active until {new Date(share.expires_at).toLocaleDateString()} · {share.openCount ?? 0} hourly opens</small><button type="button" disabled={busy} onClick={() => revoke(share.id)}>Revoke</button></div>)}</section>;
+
+  if (document.opportunity.status === "canonical") return null;
+
+  return <>
+    <OpportunityAcceptance projectId={document.projectId} />
+    {document.opportunity.visibility === "shared" && <section className="opportunity-planner" aria-label="Private opportunity links">
+      <header><strong>Private share links</strong><small>Links are pinned to the current immutable Shared publication, expire after seven days, and can be revoked at any time.</small></header>
+      {!publishedShared && <p className="guardrail-note">Publish this opportunity as Shared before creating a recipient link.</p>}
+      {publishedShared && <button type="button" className="secondary-action" onClick={() => void create()} disabled={busy}>{busy ? "Creating…" : "Create private link"}</button>}
+      {createdUrl && <div className="share-created" role="status"><strong>New share link</strong><input aria-label="Created private share link" readOnly value={createdUrl} /><button type="button" className="secondary-action" onClick={() => void copyCreatedUrl()}>Copy link</button></div>}
+      {error && <p className="form-message" role="alert">{error}</p>}
+      {shares.length > 0 && <ul className="share-list">{shares.map((share) => { const state = shareState(share); return <li key={share.id}><div><strong>{state}</strong><small>Expires {new Date(share.expires_at).toLocaleString()} · {share.openCount ?? 0} coarse hourly opens</small></div>{state === "Active" && <button type="button" className="danger-action" onClick={() => void revoke(share.id)} disabled={busy}>Revoke</button>}</li>; })}</ul>}
+      <small className="guardrail-note">Only the selected immutable opportunity snapshot is shared. Draft edits, canonical projects, and other variants remain private.</small>
+    </section>}
+  </>;
 }
