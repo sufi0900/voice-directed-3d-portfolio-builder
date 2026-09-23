@@ -24,7 +24,7 @@ export const PORTFOLIO_TEMPLATES: PortfolioTemplate[] = TEMPLATE_CONTRACTS.map((
   id: template.id,
   name: template.name,
   description: template.description,
-  mode: template.mode as "3d" | "2d", // Add type assertion here
+  mode: template.mode,
   audience: template.audience,
   document: template.document,
 }));
