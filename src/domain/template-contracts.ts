@@ -20,49 +20,13 @@ export type TemplateContract = {
 };
 
 export const TEMPLATE_CONTRACTS: readonly TemplateContract[] = [
-  {
-    id: "cinematic-orbit",
-    name: "Cinematic Orbit",
-    description: "Immersive split-screen storytelling with an interactive orbital capability system.",
-    audience: "Creators and AI professionals",
-    presentation: { accent: "cyan", background: "midnight", heroAlignment: "left", sceneFamily: "orbital-showcase", scenePreset: "cosmic", motion: "calm", intensity: .9 },
-  },
-  {
-    id: "architectural-grid",
-    name: "Architectural Grid",
-    description: "A technical, structured composition with a connected constellation field.",
-    audience: "Engineers and technical specialists",
-    presentation: { accent: "violet", background: "ink", heroAlignment: "left", sceneFamily: "constellation-field", scenePreset: "architect", motion: "dynamic", intensity: 1.05 },
-  },
-  {
-    id: "editorial-depth",
-    name: "Editorial Depth",
-    description: "A centered editorial composition with restrained motion and generous reading space.",
-    audience: "Writers, consultants and strategists",
-    presentation: { accent: "coral", background: "plum", heroAlignment: "center", sceneFamily: "constellation-field", scenePreset: "minimal", motion: "calm", intensity: .7 },
-  },
-  {
-    id: "kinetic-gallery",
-    name: "Kinetic Gallery",
-    description: "An editorial 3D gallery of suspended project panels and a luminous monolith—no orbital motifs.",
-    audience: "Designers, directors and visual storytellers",
-    presentation: { accent: "lime", background: "ink", heroAlignment: "left", sceneFamily: "kinetic-gallery", scenePreset: "architect", motion: "calm", intensity: .85 },
-  },
-  {
-    id: "velocity-atelier",
-    name: "Velocity Atelier",
-    description: "A night-showroom automotive stage with a sculpted GT coupe, cruising light streaks and cinematic 3D sections.",
-    audience: "Product designers, technologists and ambitious independent creators",
-    presentation: { accent: "coral", background: "ink", heroAlignment: "left", sceneFamily: "velocity-roadster", scenePreset: "minimal", motion: "dynamic", intensity: 1.05 },
-  },
-  {
-    id: "professional-light",
-    name: "Professional Light",
-    description: "Clean, light 2D portfolio with a professional editorial layout and no WebGL scene.",
-    audience: "Consultants, founders, and professional service brands",
-    presentation: { accent: "cyan", background: "ivory", heroAlignment: "left", sceneFamily: "orbital-showcase", scenePreset: "minimal", motion: "calm", intensity: 0.55 },
-  },
-] as const;
+  { id: "cinematic-orbit", name: "Cinematic Orbit", description: "Immersive split-screen storytelling with an interactive orbital capability system.", audience: "Creators and AI professionals", presentation: { accent: "cyan", background: "midnight", heroAlignment: "left", sceneFamily: "orbital-showcase", scenePreset: "cosmic", motion: "calm", intensity: .9 } },
+  { id: "architectural-grid", name: "Architectural Grid", description: "A technical, structured composition with a connected constellation field.", audience: "Engineers and technical specialists", presentation: { accent: "violet", background: "ink", heroAlignment: "left", sceneFamily: "constellation-field", scenePreset: "architect", motion: "dynamic", intensity: 1.05 } },
+  { id: "editorial-depth", name: "Editorial Depth", description: "A centered editorial composition with restrained motion and generous reading space.", audience: "Writers, consultants and strategists", presentation: { accent: "coral", background: "plum", heroAlignment: "center", sceneFamily: "constellation-field", scenePreset: "minimal", motion: "calm", intensity: .7 } },
+  { id: "kinetic-gallery", name: "Kinetic Gallery", description: "An editorial 3D gallery of suspended project panels and a luminous monolith—no orbital motifs.", audience: "Designers, directors and visual storytellers", presentation: { accent: "lime", background: "ink", heroAlignment: "left", sceneFamily: "kinetic-gallery", scenePreset: "architect", motion: "calm", intensity: .85 } },
+  { id: "velocity-atelier", name: "Velocity Atelier", description: "A night-showroom automotive stage with a sculpted GT coupe, cruising light streaks and cinematic 3D sections.", audience: "Product designers, technologists and ambitious independent creators", presentation: { accent: "coral", background: "ink", heroAlignment: "left", sceneFamily: "velocity-roadster", scenePreset: "minimal", motion: "dynamic", intensity: 1.05 } },
+  { id: "professional-light", name: "Professional Light", description: "Clean, light 2D portfolio with a professional editorial layout and no WebGL scene.", audience: "Consultants, founders, and professional service brands", presentation: { accent: "cyan", background: "ivory", heroAlignment: "left", sceneFamily: "orbital-showcase", scenePreset: "minimal", motion: "calm", intensity: .55 } },
+];
 
 export function getTemplateContract(id: TemplateId) {
   return TEMPLATE_CONTRACTS.find((template) => template.id === id)!;
