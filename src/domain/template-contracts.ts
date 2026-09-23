@@ -7,6 +7,7 @@ export type TemplateContract = {
   id: TemplateId;
   name: string;
   description: string;
+  mode: "3d" | "2d"; // Add mode property here
   audience: string;
   presentation: {
     accent: SiteDocument["design"]["accent"];
