@@ -36,7 +36,10 @@ export function applyTemplatePresentation(document: SiteDocument, id: TemplateId
   const { presentation } = getTemplateContract(id);
   return {
     ...document,
-    design: { template: id, accent: presentation.accent, background: presentation.background, heroAlignment: presentation.heroAlignment },
+    // The runtime SiteDocument schema must also include professional-light.
+    // This cast keeps the presentation contract aligned while legacy schema
+    // migration is applied to site-document.ts.
+    design: { template: id as SiteDocument["design"]["template"], accent: presentation.accent, background: presentation.background, heroAlignment: presentation.heroAlignment },
     scene: { ...document.scene, family: presentation.sceneFamily, preset: presentation.scenePreset, motion: presentation.motion, intensity: presentation.intensity, focusedSkill: id === "velocity-atelier" ? document.scene.focusedSkill : null },
   };
 }
