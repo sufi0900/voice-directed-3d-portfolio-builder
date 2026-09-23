@@ -1,6 +1,6 @@
 import type { SiteDocument } from "./site-document";
 
-export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier"] as const;
+export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier", "professional-light"] as const;
 export type TemplateId = typeof templateOptions[number];
 
 export type TemplateContract = {
@@ -55,6 +55,13 @@ export const TEMPLATE_CONTRACTS: readonly TemplateContract[] = [
     audience: "Product designers, technologists and ambitious independent creators",
     presentation: { accent: "coral", background: "ink", heroAlignment: "left", sceneFamily: "velocity-roadster", scenePreset: "minimal", motion: "dynamic", intensity: 1.05 },
   },
+  {
+    id: "professional-light",
+    name: "Professional Light",
+    description: "Clean, light 2D portfolio with a professional editorial layout and no WebGL scene.",
+    audience: "Consultants, founders, and professional service brands",
+    presentation: { accent: "cyan", background: "ivory", heroAlignment: "left", sceneFamily: "orbital-showcase", scenePreset: "minimal", motion: "calm", intensity: 0.55 },
+  },
 ] as const;
 
 export function getTemplateContract(id: TemplateId) {
@@ -66,6 +73,6 @@ export function applyTemplatePresentation(document: SiteDocument, id: TemplateId
   return {
     ...document,
     design: { template: id, accent: presentation.accent, background: presentation.background, heroAlignment: presentation.heroAlignment },
-    scene: { ...document.scene, family: presentation.sceneFamily, preset: presentation.scenePreset, motion: presentation.motion, intensity: presentation.intensity, focusedSkill: id === "velocity-atelier" ? null : document.scene.focusedSkill },
+    scene: { ...document.scene, family: presentation.sceneFamily, preset: presentation.scenePreset, motion: presentation.motion, intensity: presentation.intensity, focusedSkill: id === "velocity-atelier" ? document.scene.focusedSkill : null },
   };
 }

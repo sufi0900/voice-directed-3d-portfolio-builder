@@ -21,23 +21,26 @@ const base = (overrides: Partial<SiteDocument>): SiteDocument => ({
 });
 
 export const PORTFOLIO_TEMPLATES: PortfolioTemplate[] = [
-  ...TEMPLATE_CONTRACTS.map((template) => ({ id: template.id, name: template.name, description: template.description, mode: "3d" as const, audience: template.audience, document: base({ design: { template: template.id, accent: template.presentation.accent, background: template.presentation.background, heroAlignment: template.presentation.heroAlignment }, scene: { family: template.presentation.sceneFamily, preset: template.presentation.scenePreset, motion: template.presentation.motion, intensity: template.presentation.intensity, focusedSkill: null } }) })),
+  ...TEMPLATE_CONTRACTS.map((template) => ({
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    mode: template.id === "professional-light" ? "2d" : "3d",
+    audience: template.audience,
+    document: base({ design: { template: template.id, accent: template.presentation.accent, background: template.presentation.background, heroAlignment: template.presentation.heroAlignment }, scene: { ...DEFAULT_SITE_DOCUMENT.scene, family: template.presentation.sceneFamily, preset: template.presentation.scenePreset, motion: template.presentation.motion, intensity: template.presentation.intensity, focusedSkill: null } }),
+  })),
 ];
 
 export function getTemplate(id: string) {
   return PORTFOLIO_TEMPLATES.find((template) => template.id === id);
 }
 
-export function buildGuidedDocument(input: { name: string; role: string; intro: string; skills?: string[]; education?: string[]; style: "creative" | "technical" | "minimal"; projectId?: string; cv?: CvProvenance; interview?: GuidedInterview }): SiteDocument {
-  const templateId: TemplateId = input.style === "technical" ? "architectural-grid" : input.style === "minimal" ? "editorial-depth" : "cinematic-orbit";
+export function buildGuidedDocument(input: { name: string; role: string; intro: string; skills?: string[]; education?: string[]; style: "creative" | "technical" | "minimal"; projectId?: string; cv?: { approvedFacts: Array<{ kind: "name" | "role" | "intro" | "skill" | "education" | "experience"; value: string }> }; interview?: GuidedInterview; }): SiteDocument {
+  const templateId: TemplateId = input.style === "technical" ? "architectural-grid" : input.style === "minimal" ? (input.cv ? "professional-light" : "editorial-depth") : "cinematic-orbit";
   const template = getTemplate(templateId)!;
   const approved = input.cv?.approvedFacts ?? [];
   const fact = (kind: "name" | "role" | "intro") => approved.find((item) => item.kind === kind)?.value;
-  const cvSkills = approved.filter((item) => item.kind === "skill").slice(0, 8).map((item, index) => ({
-    id: `cv-skill-${index + 1}`,
-    label: item.value.slice(0, 32),
-    level: 4,
-  }));
+  const cvSkills = approved.filter((item) => item.kind === "skill").slice(0, 8).map((item, index) => ({ id: `cv-skill-${index + 1}`, label: item.value.slice(0, 32), level: 4 }));
   const suppliedSkills = (input.skills ?? []).slice(0, 8).map((label, index) => ({ id: `guided-skill-${index + 1}`, label: label.slice(0, 32), level: 3 }));
   const selectedSkills = cvSkills.length ? cvSkills : suppliedSkills;
   const skills = selectedSkills.length === 0
@@ -51,15 +54,10 @@ export function buildGuidedDocument(input: { name: string; role: string; intro: 
     ...template.document,
     projectId: input.projectId ?? crypto.randomUUID(),
     updatedAt: new Date().toISOString(),
-    identity: {
-      ...template.document.identity,
-      name: fact("name") ?? input.name,
-      role: fact("role") ?? input.role,
-      intro: fact("intro") ?? input.intro,
-    },
+    identity: { ...template.document.identity, name: fact("name") ?? input.name, role: fact("role") ?? input.role, intro: fact("intro") ?? input.intro },
     skills,
     content: { ...template.document.content, education },
-    provenance: input.cv ? { cv: input.cv } : undefined,
+    provenance: input.cv ? { cv: { ...input.cv, approvedFacts: input.cv.approvedFacts } } : undefined,
   };
   return input.interview ? applyGuidedInterview(document, input.interview) : document;
 }
