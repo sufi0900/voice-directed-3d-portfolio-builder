@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, FileText, GripVertical, ImagePlus, List, ListOrdered, Plus, Send, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, FileText, GripVertical, ImagePlus, List, ListOrdered, Plus, Send, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SiteCommand } from "@/domain/commands";
@@ -10,22 +10,31 @@ import { deriveImageAlt } from "@/domain/media";
 
 type Kind = "page" | "post";
 type Publishable = SiteDocument["publishing"]["pages"][number] | SiteDocument["publishing"]["posts"][number];
-type Props = { document: SiteDocument; execute: (command: SiteCommand) => void; kind: Kind; canUploadMedia: boolean; selectedItemId?: string; onSelect?: (itemId: string) => void };
+type Props = { document: SiteDocument; publishedDocument?: SiteDocument; execute: (command: SiteCommand) => void; kind: Kind; canUploadMedia: boolean; selectedItemId?: string; onSelect?: (itemId: string) => void; onPreviewListing?: () => void; onPublishItem?: (kind: Kind, itemId: string, status: "draft" | "published") => void; publishingItemId?: string; publishError?: string; canDirectPublish?: boolean };
 
-export function PublishingEditor({ document, execute, kind, canUploadMedia, selectedItemId, onSelect }: Props) {
+export function PublishingEditor({ document, publishedDocument, execute, kind, canUploadMedia, selectedItemId, onSelect, onPreviewListing, onPublishItem, publishingItemId = "", publishError = "", canDirectPublish = false }: Props) {
   const collection = kind === "page" ? document.publishing.pages : document.publishing.posts;
   const selectedId = selectedItemId && collection.some((entry) => entry.id === selectedItemId) ? selectedItemId : collection[0]?.id ?? "";
   useEffect(() => { if (selectedId && selectedId !== selectedItemId) onSelect?.(selectedId); }, [onSelect, selectedId, selectedItemId]);
   const item = collection.find((entry) => entry.id === selectedId);
   const isPage = kind === "page";
+  const readiness = item ? publicationReadiness(item, kind, document) : [];
+  const ready = readiness.every((entry) => entry.complete);
+  const isPublishing = Boolean(item && (publishingItemId === item.id || publishingItemId === "__snapshot__"));
+  const publishedCollection = kind === "page" ? publishedDocument?.publishing.pages : publishedDocument?.publishing.posts;
+  const publishedItem = item ? publishedCollection?.find((entry) => entry.id === item.id) : undefined;
+  const isLive = publishedItem?.status === "published";
+  const hasUnpublishedChanges = item ? !publishedItem || JSON.stringify(item) !== JSON.stringify(publishedItem) : false;
+  const statusLabel = isLive ? hasUnpublishedChanges ? "published · changes pending" : "published" : "draft";
 
   return <section className="publishing-editor">
     <div className="content-explainer"><strong>{isPage ? "Standalone site pages" : "Blog posts"}</strong><p>{isPage ? "Create long-form pages such as a detailed About page, Services, Process, or Resources. Published pages can appear in your site navigation." : "Create articles here. Every published article is collected automatically on one Blog page—articles are never added as separate navigation tabs."}</p></div>
-    <header><div><strong>{isPage ? "Site pages" : "Articles"}</strong><small>{collection.length}/{isPage ? 12 : 24} · drafts stay private</small></div><button type="button" disabled={collection.length >= (isPage ? 12 : 24)} onClick={() => execute({ type: "publishing.add", kind })}><Plus size={15} />New {isPage ? "page" : "article"}</button></header>
+    <header><div><strong>{isPage ? "Site pages" : "Articles"}</strong><small>{collection.length}/{isPage ? 12 : 24} · drafts stay private</small></div><div className="publishing-header-actions">{!isPage && collection.length > 0 && <button type="button" className="secondary-action" onClick={onPreviewListing}>Preview Blog listing</button>}<button type="button" disabled={collection.length >= (isPage ? 12 : 24)} onClick={() => execute({ type: "publishing.add", kind })}><Plus size={15} />New {isPage ? "page" : "article"}</button></div></header>
     {collection.length > 0 && <div className="publishing-picker">{collection.map((entry) => <button type="button" className={entry.id === selectedId ? "active" : ""} key={entry.id} onClick={() => onSelect?.(entry.id)}><FileText size={14} /><span>{entry.title}<small>{entry.status} · /{entry.slug}</small></span></button>)}</div>}
     {!item ? <div className="portfolio-empty-state">Create your first {isPage ? "standalone page" : "blog article"}.</div> : <>
-      <div className="publishable-toolbar"><span className={`content-status ${item.status}`}>{item.status}</span><button type="button" className={item.status === "published" ? "secondary-action" : "primary-action"} onClick={() => execute({ type: "publishing.setStatus", kind, itemId: item.id, status: item.status === "published" ? "draft" : "published" })}><Send size={14} />{item.status === "published" ? "Return to draft" : "Include in next publish"}</button><button type="button" className="danger-action" onClick={() => execute({ type: "publishing.remove", kind, itemId: item.id })}><Trash2 size={14} />Remove</button></div>
-      <div className="publication-readiness"><strong>How this becomes accessible</strong><ol><li className={item.status === "published" ? "complete" : ""}>Include this {isPage ? "page" : "article"} in the next publish.</li><li>Use the main Publish button after the draft finishes saving.</li><li>{isPage ? `Open it from the site navigation at /pages/${item.slug}.` : "Open Blog from the site navigation; this article will appear in the listing."}</li></ol></div>
+      <div className="publishable-toolbar"><span className={`content-status ${isLive ? "published" : "draft"}`}>{statusLabel}</span><button type="button" className="secondary-action" disabled={!isLive || isPublishing} onClick={() => onPublishItem?.(kind, item.id, "draft")}><Check size={14} />{isLive ? `Unpublish ${isPage ? "page" : "article"}` : "Saved as draft"}</button><button type="button" className="primary-action" disabled={!ready || !canDirectPublish || (isLive && !hasUnpublishedChanges) || isPublishing} onClick={() => onPublishItem?.(kind, item.id, "published")}><Send size={14} />{isPublishing ? "Publishing…" : isLive ? "Publish changes" : `Publish ${isPage ? "page" : "article"}`}</button><button type="button" className="danger-action" disabled={isPublishing} onClick={() => execute({ type: "publishing.remove", kind, itemId: item.id })}><Trash2 size={14} />Remove</button></div>
+      <div className="publication-readiness"><strong>Publication readiness</strong><p>{isPage ? "Published pages can appear in the portfolio navigation." : "Publishing here saves the draft, updates the immutable portfolio snapshot, and adds the article to the single Blog listing automatically."}</p><ul>{readiness.map((entry) => <li className={entry.complete ? "complete" : ""} key={entry.label}>{entry.complete ? <Check size={13} /> : <span />}{entry.label}</li>)}</ul>{!canDirectPublish && <small>Save this portfolio and configure its public URL before publishing individual content.</small>}</div>
+      {publishError && <p className="form-message">{publishError}</p>}
       <BufferedField label="Title" value={item.title} maxLength={120} onCommit={(value) => execute({ type: "publishing.update", kind, itemId: item.id, field: "title", value })} />
       <BufferedField label="Public URL" prefix={isPage ? "/pages/" : "/blog/"} value={item.slug} maxLength={80} onCommit={(value) => execute({ type: "publishing.update", kind, itemId: item.id, field: "slug", value })} />
       {isPage && <BufferedField label="Navigation label" value={"navigationLabel" in item ? item.navigationLabel : ""} maxLength={40} onCommit={(value) => execute({ type: "publishing.update", kind, itemId: item.id, field: "navigationLabel", value })} />}
@@ -35,6 +44,20 @@ export function PublishingEditor({ document, execute, kind, canUploadMedia, sele
       <BlockEditor document={document} kind={kind} item={item} execute={execute} canUploadMedia={canUploadMedia} />
     </>}
   </section>;
+}
+
+function publicationReadiness(item: Publishable, kind: Kind, document: SiteDocument) {
+  const hasContent = item.blocks.some((block) => block.type === "image" ? Boolean(block.mediaId) : block.type === "list" || block.type === "ordered-list" ? block.items.length > 0 : Boolean(block.text.trim()));
+  const base = [
+    { label: "Title", complete: Boolean(item.title.trim()) },
+    { label: "Unique public URL", complete: Boolean(item.slug.trim()) },
+    { label: "SEO title", complete: Boolean(item.seoTitle.trim()) },
+    { label: "SEO description", complete: Boolean(item.seoDescription.trim()) },
+    { label: "Page content", complete: hasContent },
+  ];
+  if (kind === "page") return base;
+  const post = item as SiteDocument["publishing"]["posts"][number];
+  return [base[0], base[1], { label: "Article excerpt", complete: Boolean(post.excerpt.trim()) }, { label: "Cover image", complete: Boolean(post.coverMediaId && document.media.assets.some((asset) => asset.id === post.coverMediaId)) }, ...base.slice(2)];
 }
 
 function BlockEditor({ document: siteDocument, kind, item, execute, canUploadMedia }: { document: SiteDocument; kind: Kind; item: Publishable; execute: (command: SiteCommand) => void; canUploadMedia: boolean }) {

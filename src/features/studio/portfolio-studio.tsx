@@ -19,9 +19,9 @@ import { scrollPreviewContainer } from "./preview-navigation";
 import { SceneRenderer } from "@/features/scene/scene-renderer";
 
 const STORAGE_KEY = "voxfolio-demo-document-v1";
-const backgroundClass = { midnight: "bg-midnight", ink: "bg-ink", plum: "bg-plum", cloud: "bg-cloud" } as const;
+const backgroundClass = { midnight: "bg-midnight", ink: "bg-ink", plum: "bg-plum", cloud: "bg-cloud", ivory: "bg-ivory" } as const;
 
-type Publication = { slug: string; revision: number; published_at: string };
+type Publication = { slug: string; revision: number; published_at: string; document?: SiteDocument };
 
 export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio", persistence = "local", initialPublication, authenticated = false, userEmail }: { initialDocument?: SiteDocument; projectName?: string; persistence?: "local" | "server"; initialPublication?: Publication; authenticated?: boolean; userEmail?: string }) {
   const [state, dispatch] = useReducer(studioReducer, initialStudioState);
@@ -36,6 +36,10 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publication, setPublication] = useState<Publication | undefined>(initialPublication);
+  const [publishedDocument, setPublishedDocument] = useState<SiteDocument | undefined>(initialPublication?.document);
+  const [pendingGlobalPublication, setPendingGlobalPublication] = useState(false);
+  const [publishingItemId, setPublishingItemId] = useState("");
+  const [saveRetry, setSaveRetry] = useState(0);
   const [publishError, setPublishError] = useState("");
   const [slug, setSlug] = useState(initialPublication?.slug ?? normalizePublicationSlug(projectName));
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -44,6 +48,8 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   const [voiceWidth, setVoiceWidth] = useState(320);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [voiceHidden, setVoiceHidden] = useState(false);
+  const [pendingItemPublication, setPendingItemPublication] = useState<{ kind: "page" | "post"; itemId: string; status: "draft" | "published"; targetRevision: number } | null>(null);
+  const [itemPublishError, setItemPublishError] = useState("");
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -73,34 +79,86 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     const timer = window.setTimeout(async () => {
       if (persistence === "local") return setSaved(true);
       setSaveError("");
-      const response = await fetch(`/api/projects/${state.present.projectId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ document: state.present, expectedRevision: serverRevision.current, source: state.receipts.at(-1)?.source ?? "autosave" }) });
-      const result = await response.json();
-      if (!response.ok) { setSaveError(result.code === "REVISION_CONFLICT" ? "This project changed elsewhere. Refresh before editing again." : result.error ?? "Save failed."); return; }
-      serverRevision.current = result.revision; setCloudRevision(result.revision); setSaved(true);
+      try {
+        const response = await fetch(`/api/projects/${state.present.projectId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ document: state.present, expectedRevision: serverRevision.current, source: state.receipts.at(-1)?.source ?? "autosave" }) });
+        const result = await response.json();
+        if (!response.ok) { setSaveError(result.code === "REVISION_CONFLICT" ? "This project changed elsewhere. Refresh before editing again." : result.error ?? "Save failed."); return; }
+        serverRevision.current = result.revision; setCloudRevision(result.revision); setSaved(true);
+      } catch { setSaveError("The draft could not reach the server. Your edits remain in this browser; retry before publishing."); }
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [persistence, state.hydrated, state.present, state.receipts]);
+  }, [persistence, saveRetry, state.hydrated, state.present, state.receipts]);
 
   const executeManual = useCallback((command: SiteCommand) => dispatch({ type: "execute", command, source: "manual" }), []);
-  const executeVoice = useCallback((command: SiteCommand) => dispatch({ type: "execute", command, source: "voice" }), []);
+  const executeVoice = useCallback((command: SiteCommand, next?: SiteDocument) => dispatch({ type: "execute", command, source: "voice", next }), []);
   const undoVoice = useCallback(() => dispatch({ type: "undo", source: "voice" }), []);
-  const voice = useAssemblyAIAgent({ document: state.present, execute: executeVoice, undo: undoVoice });
+  const navigateFromAssistant = useCallback((target: { section: string; itemId?: string; panel?: "content" | "design" | "scene" }) => {
+    setPreviewOnly(false);
+    setEditorExpanded(false);
+    setPreviewTarget({ section: target.section, ...(target.itemId ? { itemId: target.itemId } : {}) });
+    dispatch({ type: "selectPanel", panel: target.panel ?? "content" });
+  }, []);
+  const voice = useAssemblyAIAgent({ document: state.present, execute: executeVoice, undo: undoVoice, navigate: navigateFromAssistant });
   const focusedSkill = useMemo(() => state.present.skills.find((skill) => skill.id === state.present.scene.focusedSkill), [state.present]);
+  const portfolioHasUnpublishedChanges = useMemo(() => Boolean(publication && (!publishedDocument || JSON.stringify(publishedDocument) !== JSON.stringify(state.present))), [publication, publishedDocument, state.present]);
 
-  async function publish() {
-    setPublishing(true); setPublishError("");
-    const response = await fetch(`/api/projects/${state.present.projectId}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, expectedRevision: serverRevision.current }) });
-    const result = await response.json(); setPublishing(false);
-    if (!response.ok) return setPublishError(result.error ?? "Publishing failed.");
-    setPublication(result.publication); setPublishOpen(false);
+  const publishItem = useCallback((kind: "page" | "post", itemId: string, status: "draft" | "published") => {
+    if (persistence !== "server") return setItemPublishError("Sign in and save this portfolio before publishing content.");
+    if (slug.length < 3) return setItemPublishError("Set a valid public portfolio URL from the main Publish dialog first.");
+    setItemPublishError("");
+    const collection = kind === "page" ? state.present.publishing.pages : state.present.publishing.posts;
+    const item = collection.find((entry) => entry.id === itemId);
+    if (!item) return setItemPublishError("That content item no longer exists.");
+    const changesStatus = item.status !== status;
+    if (changesStatus) executeManual({ type: "publishing.setStatus", kind, itemId, status });
+    setPendingItemPublication({ kind, itemId, status, targetRevision: state.present.revision + (changesStatus ? 1 : 0) });
+  }, [executeManual, persistence, slug.length, state.present]);
+
+  useEffect(() => {
+    if (!pendingItemPublication || !saved || cloudRevision < pendingItemPublication.targetRevision || cloudRevision !== state.present.revision || publishing) return;
+    const snapshot = state.present;
+    setPendingItemPublication(null); setPublishing(true); setPublishingItemId(pendingItemPublication.itemId); setItemPublishError("");
+    void (async () => {
+      try {
+        const response = await fetch(`/api/projects/${state.present.projectId}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, expectedRevision: cloudRevision }) });
+        const result = await response.json();
+        if (!response.ok) return setItemPublishError(result.error ?? "Could not update the live article collection.");
+        setPublishedDocument(snapshot);
+        setPublication({ ...result.publication, document: snapshot });
+      } catch { setItemPublishError("The publication request was interrupted. Your saved draft is safe; please try again."); }
+      finally { setPublishing(false); setPublishingItemId(""); }
+    })();
+  }, [cloudRevision, pendingItemPublication, publishing, saved, slug, state.present]);
+
+  function publish() {
+    setPublishError("");
+    setPendingGlobalPublication(true);
+    if (saveError) { setSaveError(""); setSaveRetry((value) => value + 1); }
   }
+
+  useEffect(() => {
+    if (!pendingGlobalPublication || publishing || !saved || saveError || cloudRevision !== state.present.revision) return;
+    const snapshot = state.present;
+    setPendingGlobalPublication(false); setPublishing(true); setPublishError("");
+    void (async () => {
+      try {
+        const response = await fetch(`/api/projects/${snapshot.projectId}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, expectedRevision: cloudRevision }) });
+        const result = await response.json();
+        if (!response.ok) return setPublishError(result.error ?? "Publishing failed.");
+        setPublishedDocument(snapshot);
+        setPublication({ ...result.publication, document: snapshot });
+        setPublishOpen(false);
+      } catch { setPublishError("The publish request was interrupted. Your saved draft is safe; please try again."); }
+      finally { setPublishing(false); }
+    })();
+  }, [cloudRevision, pendingGlobalPublication, publishing, saveError, saved, slug, state.present]);
 
   async function unpublish() {
     setPublishing(true); setPublishError("");
     const response = await fetch(`/api/projects/${state.present.projectId}/publish`, { method: "DELETE" });
     const result = await response.json(); setPublishing(false);
     if (!response.ok) return setPublishError(result.error ?? "Could not unpublish.");
-    setPublication(undefined); setPublishOpen(false);
+    setPublication(undefined); setPublishedDocument(undefined); setPublishOpen(false);
   }
 
   return (
@@ -111,8 +169,8 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
         <div className="top-actions">
           <button type="button" onClick={() => dispatch({ type: "undo", source: "manual" })} disabled={!state.past.length} aria-label="Undo"><Undo2 size={17} /></button>
           <button type="button" onClick={() => dispatch({ type: "redo" })} disabled={!state.future.length} aria-label="Redo"><Redo2 size={17} /></button>
-          <button type="button" className="preview-button" onClick={() => setPreviewOnly((value) => !value)}><Eye size={16} />{previewOnly ? "Exit preview" : "Preview"}</button>
-          {persistence === "server" && <button type="button" className="publish-button" onClick={() => setPublishOpen(true)}><Globe2 size={16} />{publication ? "Published" : "Publish"}</button>}
+          <button type="button" className="preview-button" onClick={() => { if (previewOnly) setPreviewOnly(false); else { setEditorExpanded(false); setPreviewOnly(true); } }}><Eye size={16} />{previewOnly ? "Exit preview" : "Preview"}</button>
+          {persistence === "server" && <button type="button" className="publish-button" onClick={() => setPublishOpen(true)}><Globe2 size={16} />{publication ? portfolioHasUnpublishedChanges ? "Changes pending" : "Published" : "Publish"}</button>}
           {persistence === "server" && <button type="button" onClick={() => setHistoryOpen(true)}><Clock3 size={16} />History</button>}
           {persistence === "local" && <Link className="publish-button top-link" href={guestClaimPath(authenticated)}><Save size={15} />Save & publish</Link>}
           <Link className="top-link" href={authenticated ? "/projects" : "/login"}>{authenticated ? "My projects" : "Sign in"}</Link>
@@ -128,20 +186,21 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
             <Tab active={state.selectedPanel === "design"} label="Design" icon={<Palette size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "design" })} />
             <Tab active={state.selectedPanel === "scene"} label="3D Scene" icon={<Layers3 size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "scene" })} />
           </nav>
-          <div className="expanded-editor-surface"><ManualControls document={state.present} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} previewTarget={previewTarget} onPreviewTarget={setPreviewTarget} /></div>
+          {state.lastCommandError && <p className="form-message" role="alert">{state.lastCommandError}</p>}
+          <div className="expanded-editor-surface"><ManualControls document={state.present} publishedDocument={publishedDocument} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} previewTarget={previewTarget} onPreviewTarget={setPreviewTarget} onPublishItem={publishItem} publishingItemId={publishingItemId || pendingItemPublication?.itemId || (pendingGlobalPublication || publishing ? "__snapshot__" : "")} itemPublishError={itemPublishError} canDirectPublish={persistence === "server" && authenticated && slug.length >= 3} /></div>
           <button type="button" className="reset-button" onClick={() => dispatch({ type: "reset" })}><RotateCcw size={14} />Reset demo</button>
         </aside>
 
-        {!editorExpanded && <button type="button" className="panel-resizer editor-resizer" style={{ left: editorWidth - 3 }} aria-label="Resize content editor" onPointerDown={(event) => beginResize(event, editorWidth, setEditorWidth, 260, 620, 1)} />}
+        {!previewOnly && !editorExpanded && <button type="button" className="panel-resizer editor-resizer" style={{ left: editorWidth - 3 }} aria-label="Resize content editor" onPointerDown={(event) => beginResize(event, editorWidth, setEditorWidth, 260, 620, 1)} />}
 
-        <section className="preview-shell" aria-label="Live portfolio preview" hidden={editorExpanded}>
+        {!editorExpanded && <section className="preview-shell" aria-label="Live portfolio preview">
           <div className="preview-chrome"><span /><span /><span /><p>portfolio.preview</p><em>LIVE CANVAS</em></div>
           <StudioPreview document={state.present} target={previewTarget} focusedSkill={focusedSkill} execute={executeManual} reducedMotion={reducedMotion} onNavigate={setPreviewTarget} />
-        </section>
+        </section>}
 
-        {!editorExpanded && !voiceHidden && <button type="button" className="panel-resizer voice-resizer" style={{ right: voiceWidth - 3 }} aria-label="Resize voice assistant" onPointerDown={(event) => beginResize(event, voiceWidth, setVoiceWidth, 260, 520, -1)} />}
-        {!editorExpanded && !voiceHidden && <VoicePanel {...voice} onHide={() => setVoiceHidden(true)} />}
-        {!editorExpanded && voiceHidden && <button type="button" className="restore-voice" onClick={() => setVoiceHidden(false)}><PanelRightOpen size={16} />Show voice assistant</button>}
+        {!previewOnly && !editorExpanded && !voiceHidden && <button type="button" className="panel-resizer voice-resizer" style={{ right: voiceWidth - 3 }} aria-label="Resize voice assistant" onPointerDown={(event) => beginResize(event, voiceWidth, setVoiceWidth, 260, 520, -1)} />}
+        {!previewOnly && !editorExpanded && !voiceHidden && <VoicePanel {...voice} onHide={() => setVoiceHidden(true)} />}
+        {!previewOnly && !editorExpanded && voiceHidden && <button type="button" className="restore-voice" onClick={() => setVoiceHidden(false)}><PanelRightOpen size={16} />Show voice assistant</button>}
       </div>
       <footer className="command-footer"><span>One governed command pipeline</span><p>Manual edit <b>→</b> validation <b>→</b> revision <b>→</b> undo</p><p>Voice tool <b>→</b> validation <b>→</b> revision <b>→</b> undo</p></footer>
       {publishOpen && <div className="publish-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPublishOpen(false); }}>
@@ -151,8 +210,9 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
           <label>Public URL slug<div className="slug-field"><span>/p/</span><input value={slug} maxLength={64} onChange={(event) => setSlug(normalizePublicationSlug(event.target.value))} /></div></label>
           {publication && <div className="live-publication"><strong>Currently live</strong><a href={`/p/${publication.slug}`} target="_blank" rel="noreferrer">/p/{publication.slug}</a><span>Revision {publication.revision}</span><button type="button" aria-label="Copy public URL" onClick={() => navigator.clipboard.writeText(`${window.location.origin}/p/${publication.slug}`)}><Copy size={15} /> Copy URL</button></div>}
           {publishError && <p className="form-message">{publishError}</p>}
-          <footer><button type="button" className="secondary-action" onClick={() => setPublishOpen(false)}>Cancel</button>{publication && <button type="button" className="danger-action" disabled={publishing} onClick={unpublish}>Unpublish</button>}<button type="button" className="primary-action" disabled={publishing || !saved || Boolean(saveError) || slug.length < 3} onClick={publish}>{publishing ? "Publishing…" : publication ? "Publish current revision" : "Publish portfolio"}</button></footer>
-          {!saved && <small>Wait for the latest draft to finish saving before publishing.</small>}
+          <footer><button type="button" className="secondary-action" onClick={() => setPublishOpen(false)}>Cancel</button>{publication && <button type="button" className="danger-action" disabled={publishing || pendingGlobalPublication} onClick={unpublish}>Unpublish</button>}<button type="button" className="primary-action" disabled={publishing || pendingGlobalPublication || slug.length < 3} onClick={publish}>{publishing ? "Publishing…" : pendingGlobalPublication ? "Saving latest draft…" : saved ? publication ? "Publish all changes" : "Publish portfolio" : "Save & publish"}</button></footer>
+          {!saved && !saveError && <small>Your latest edits will save first, then the complete portfolio will publish automatically.</small>}
+          {saveError && <small>The last save failed. “Save & publish” will retry it before publishing.</small>}
         </section>
       </div>}
       {historyOpen && <RevisionHistory projectId={state.present.projectId} currentRevision={cloudRevision} onClose={() => setHistoryOpen(false)} onRestored={() => window.location.reload()} />}
@@ -173,9 +233,15 @@ function StudioPreview({ document, target, focusedSkill, execute, reducedMotion,
     return () => window.cancelAnimationFrame(frame);
   }, [reducedMotion, target]);
   const item = target.section === "site pages" ? document.publishing.pages.find((entry) => entry.id === target.itemId) : target.section === "blog posts" ? document.publishing.posts.find((entry) => entry.id === target.itemId) : undefined;
+  if (target.section === "blog posts" && target.itemId === "__index__") return <StudioBlogIndex document={document} onNavigate={onNavigate} />;
   if (target.section === "site pages" || target.section === "blog posts") { const cover = item ? document.media.assets.find((asset) => asset.id === item.coverMediaId) : undefined; return <div ref={previewRef} className="portfolio-preview content-draft-preview"><button type="button" className="preview-back-button" onClick={() => onNavigate({ section: "hero" })}>← Back to homepage preview</button>{item ? <article><p className="section-eyebrow">{target.section === "blog posts" ? "BLOG ARTICLE PREVIEW" : "SITE PAGE PREVIEW"}</p><h1>{item.title}</h1>{"excerpt" in item && item.excerpt && <p className="draft-excerpt">{item.excerpt}</p>}{cover && <figure className="published-content-cover draft-cover"><Image src={cover.url} alt={cover.alt} fill sizes="(max-width: 900px) 94vw, 900px" unoptimized /></figure>}<StructuredContent document={document} blocks={item.blocks} /></article> : <div className="portfolio-empty-state">Create an item to preview it here.</div>}</div>; }
   const navigateSection = (section: PortfolioSection) => onNavigate({ section });
-  return <div ref={previewRef} className={`portfolio-preview template-${document.design.template}`}><PortfolioNavigation document={document} onNavigateSection={navigateSection} /><div className={`portfolio-hero align-${document.design.heroAlignment}`}><div className="ambient-grid" /><div className="portfolio-copy"><p className="availability"><i />{document.identity.availability}</p><p className="kicker">DESIGNING USEFUL DIGITAL SYSTEMS</p><h2>{document.identity.name}</h2><h3>{document.identity.role}</h3><p className="intro">{document.identity.intro}</p><div className="hero-actions"><button type="button" onClick={() => navigateSection("projects")}>View selected work</button><button type="button" className="ghost" onClick={() => navigateSection("contact")}>Start a conversation</button></div>{focusedSkill && <div className="focus-card"><span>SCENE FOCUS</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}</div><div className="scene-stage"><SceneRenderer document={document} execute={execute} reducedMotion={reducedMotion} /><div className="scene-caption"><Volume2 size={14} /><span>Drag to orbit · Scroll to zoom · Select a skill</span></div></div></div><PortfolioSections document={document} editing onOpenPage={(itemId) => onNavigate({ section: "site pages", itemId })} /></div>;
+  const sceneHint = document.scene.family === "kinetic-gallery" ? "Move to shift perspective · Select a skill" : document.scene.family === "velocity-roadster" ? "Move to steer the light · Watch the road flow" : "Drag to orbit · Scroll to zoom · Select a skill";
+  return <div ref={previewRef} className={`portfolio-preview template-${document.design.template}`}><PortfolioNavigation document={document} onNavigateSection={navigateSection} onNavigatePage={(itemId) => onNavigate({ section: "site pages", itemId })} onNavigateBlog={() => onNavigate({ section: "blog posts", itemId: "__index__" })} /><div className={`portfolio-hero align-${document.design.heroAlignment}`}><div className="ambient-grid" /><div className="portfolio-copy"><p className="availability"><i />{document.identity.availability}</p><p className="kicker">DESIGNING USEFUL DIGITAL SYSTEMS</p><h2>{document.identity.name}</h2><h3>{document.identity.role}</h3><p className="intro">{document.identity.intro}</p><div className="hero-actions"><button type="button" onClick={() => navigateSection("projects")}>View selected work</button><button type="button" className="ghost" onClick={() => navigateSection("contact")}>Start a conversation</button></div>{focusedSkill && <div className="focus-card"><span>SCENE FOCUS</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}</div><div className="scene-stage"><SceneRenderer document={document} execute={execute} reducedMotion={reducedMotion} /><div className="scene-caption"><Volume2 size={14} /><span>{sceneHint}</span></div></div></div><PortfolioSections document={document} editing onOpenPage={(itemId) => onNavigate({ section: "site pages", itemId })} /></div>;
+}
+
+function StudioBlogIndex({ document, onNavigate }: { document: SiteDocument; onNavigate: (target: PreviewTarget) => void }) {
+  return <div className="portfolio-preview content-draft-preview studio-blog-index"><button type="button" className="preview-back-button" onClick={() => onNavigate({ section: "hero" })}>← Back to homepage preview</button><section className="blog-index"><header><p className="section-eyebrow">BLOG LISTING PREVIEW</p><h1>Ideas, process and field notes</h1><p>Draft and published articles by {document.identity.name}</p></header>{document.publishing.posts.length ? <div>{document.publishing.posts.map((post) => { const cover = document.media.assets.find((asset) => asset.id === post.coverMediaId); return <article key={post.id}>{cover && <div className="blog-card-cover"><Image src={cover.url} alt={cover.alt} fill sizes="430px" unoptimized /></div>}<div><span>{post.status}</span><h2>{post.title}</h2><p>{post.excerpt || "Add an excerpt to introduce this article."}</p><button type="button" onClick={() => onNavigate({ section: "blog posts", itemId: post.id })}>Open article preview</button></div></article>; })}</div> : <div className="portfolio-empty-state">Create an article to populate this Blog listing.</div>}</section></div>;
 }
 
 function beginResize(event: React.PointerEvent, initial: number, update: (value: number) => void, min: number, max: number, direction: 1 | -1) {

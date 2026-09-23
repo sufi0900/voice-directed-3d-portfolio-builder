@@ -15,7 +15,7 @@ export async function GET() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { data, error } = await supabase.from("projects").select("id,name,creation_mode,template_id,revision,created_at,updated_at").order("updated_at", { ascending: false });
+  const { data, error } = await supabase.from("projects").select("id,name,creation_mode,template_id,revision,created_at,updated_at,variant_of_project_id,source_revision,opportunity_status").order("updated_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ projects: data });
 }

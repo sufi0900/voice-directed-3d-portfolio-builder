@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { validateSiteDocument } from "@/domain/site-document";
+import { projectsForPresentation } from "@/domain/opportunity";
 import { PublicCaseStudy } from "@/features/public/public-case-study";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -9,7 +10,7 @@ async function caseStudy(slug: string, projectSlug: string) {
   const { data } = await supabase.from("project_publications").select("document,revision").eq("slug", slug).is("superseded_at", null).maybeSingle();
   if (!data) return null;
   const document = validateSiteDocument(data.document);
-  const project = document.content.projects.find((item) => item.caseStudySlug === projectSlug);
+  const project = projectsForPresentation(document).find((item) => item.caseStudySlug === projectSlug);
   return project ? { document: { ...document, revision: data.revision }, project } : null;
 }
 

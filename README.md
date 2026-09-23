@@ -64,9 +64,12 @@ An implementation-ready portfolio builder in which authenticated cloud projects,
 - Inline block insertion, drag/long-press reordering and semantic H2–H6 headings
 - Live SEO guidance with search-result and canonical-path previews
 - Performance-safe cinematic depth across homepage sections and standalone content
-- Three content-preserving reusable portfolio templates
-- Orbital Showcase and Constellation Field 3D scene families
+- Five content-preserving reusable portfolio templates, including the non-orbital Kinetic Gallery and bright Velocity Atelier
+- Orbital Showcase, Constellation Field, Kinetic Gallery and Velocity Roadster 3D scene families
 - Responsive desktop-expanded editor and adaptive media gallery
+- Voice/text assistant navigation that focuses the matching Studio editor and Live Canvas section
+- Gemini-first intent planning and fact-preserving copy refinement with OpenAI recovery
+- Paste-friendly assistant chat, automatic transcript following and optional interaction sounds
 
 ## Setup
 
@@ -87,13 +90,22 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_anon_key
 OPENAI_API_KEY=your_private_openai_key
 OPENAI_CV_MODEL=gpt-5-mini
 OPENAI_CONTENT_MODEL=gpt-5-mini
+GEMINI_API_KEY=your_private_gemini_key
+GEMINI_CONTENT_MODEL=gemini-3.8-flash
+GEMINI_FALLBACK_MODEL=gemini-3.5-flash-lite
+NEBIUS_API_KEY=your_private_nebius_key
+NEBIUS_MODEL=the_exact_model_id_from_your_nebius_account
+OPENROUTER_API_KEY=your_private_openrouter_key
+OPENROUTER_MODEL=the_exact_model_slug_you_enabled
 OPENAI_CV_TIMEOUT_MS=60000
 ```
 
-Create a Supabase project, then run the SQL files in order: `supabase/migrations/001_projects.sql`, `002_publications.sql`, `003_revision_restore.sql`, `004_portfolio_media.sql`, and `005_fix_portfolio_media_policies.sql`. Existing V10.1 installations need no additional SQL for V11 or V12 because media reuse and structured publishing live inside the validated document and publication snapshot. Published media URLs are intentionally public. Drafts and revision history remain owner-only. Never expose a service-role key.
+`GEMINI_FALLBACK_MODEL` is used after bounded retries for retryable Gemini failures. `OPENAI_API_KEY` is an optional second-provider fallback for assistant planning and writing refinement. Navigation, undo, exact-text replacement, skill addition, and complete social-link addition are local deterministic commands and remain available without either writing provider. Gemini HTTP 429 indicates a project rate/quota condition; HTTP 503 is treated as temporary provider unavailability. Assistant conversation history is stored per project in the browser so a recoverable provider failure does not clear the chat.
+
+Create a Supabase project, then run the SQL files in order: `supabase/migrations/001_projects.sql` through `009_professional_memory_agent_events.sql`. If you have already applied `001`–`008`, run only `009_professional_memory_agent_events.sql` before deploying V21. It creates private owner-approved memory and metadata-only agent events. The new model keys are optional and server-only: supply both key and exact model ID for each chosen provider. The planner tries configured Nebius, OpenRouter, Gemini, then OpenAI. AssemblyAI continues to power the live spoken session; the gateway handles typed planning, opportunity planning, and both spoken and typed copy refinement. Published media URLs are intentionally public. Drafts and revision history remain owner-only. Never expose a service-role key.
 
 Routes: `/` is the no-account demo, `/start` offers both creation paths, `/login` handles accounts, `/projects` lists saved work, and `/studio/[projectId]` opens the cloud-saved editor.
-The homepage is lifecycle-aware: guests receive an editable local demo and authenticate only when choosing Save & publish; signed-in owners with projects open their latest cloud project directly. `/claim` validates and moves a guest draft into private cloud storage before publishing. `/projects` exposes separate editing and live-portfolio actions. V12 adds governed custom pages and blog publishing; older documents receive compatible defaults. See `ROADMAP.md` for the V13–V15 delivery plan and major/sub-version rules.
+The homepage is lifecycle-aware: guests receive an editable local demo and authenticate only when choosing Save & publish; signed-in owners with projects open their latest cloud project directly. `/claim` validates and moves a guest draft into private cloud storage before publishing. `/projects` exposes separate editing and live-portfolio actions. V12 adds governed custom pages and blog publishing; older documents receive compatible defaults. See `ROADMAP.md` for the completed milestone history and major/sub-version rules.
 
 To create standalone content, open Studio → Content → Site pages. Use this area for long-form pages such as a detailed About page, Services, Process or Resources. Open Blog posts for articles; published articles are collected automatically on one Blog page and never become individual navigation tabs. Add an item, set its slug and metadata, then assemble typed content blocks. The item title is its only H1; structured headings support H2 through H6. Paragraphs, quotes and list items support safe inline formatting. Use the inline plus control after any block to insert content at that exact position. Reorder blocks by desktop drag, touch/pen long-press, or the accessible arrow controls. Images can be uploaded directly inside the cover or image block without completing alternative text first. Voxfolio derives a temporary accessible label from the filename, and the owner can replace it immediately in the visible Alt text field.
 
@@ -105,6 +117,14 @@ V12.4 adds cinematic depth to non-Hero content using GPU-light CSS layers rather
 
 V13 separates portfolio content from presentation. Open Design to switch between Cinematic Orbit, Architectural Grid and Editorial Depth; identity, sections, case studies, media, pages and posts remain intact. Open 3D Scene to choose Orbital Showcase or Constellation Field independently. Only one scene canvas is mounted at a time. Expanding the Content editor now activates a bounded desktop workspace with larger media, multi-column forms and an adaptive Media Library rather than stretching the sidebar controls.
 
+V14 turns that foundation into a release-gated workspace. Expanded editing is editor-only, Preview mode removes all layout customization handles, homepage structure supports exact drag/long-press ordering, voice can request the same validated placement, and template selection includes a responsive preview. Production discovery metadata, security headers and a bundle-budget check are included; run the complete acceptance commands in `MILESTONE.md` before deployment.
+
+V15 completes the publishing experience. Article-level Publish and Draft controls synchronize the immutable portfolio snapshot without a second top-level action, while a visible readiness checklist enforces complete article metadata and content. Studio and public navigation expose one Blog listing rather than one tab per article. Contact social profiles are governed, revisioned, voice-editable and rendered as accessible icons.
+
+V16 adds Kinetic Gallery: a content-preserving, non-orbital cinematic template. Its central illuminated monolith and suspended skill panels use pointer-responsive depth instead of orbital controls. It is selectable during creation, in Studio Design, or through the allowlisted voice command, while reduced-motion and static WebGL fallback remain available.
+
+V18 adds Velocity Atelier, a daylight automotive presentation built around a recognizable cinematic roadster rather than a labeled skills object. The vehicle sits in a warm architectural studio with moving roadway marks, rotating wheels, suspension motion, pointer-responsive lighting and a static fallback. Portfolio identity is presented in an editorial showroom card and the full content system continues below in a light theme. Aurora Archive is removed from the V18 selectable contract. Template and voice selection still preserve governed content and publication state.
+
 To create a case study, open Studio → Content → Projects, complete the project narrative fields and use a unique slug. Upload images once in Content → Media library, then attach them to one or more projects. The first selected image becomes the project-card and case-study cover. Removing an item from the document library removes its references but retains the underlying Storage object for revision and publication recovery; automated retention cleanup is scheduled for the production-readiness milestone.
 
 In Guided Creation, an authenticated user may optionally upload a PDF, DOCX or TXT CV up to 5 MB. Extraction proposes reviewable identity, role, summary, skill, education and experience facts. Candidates are unapproved by default; only checked facts are saved, together with a short source excerpt. The original CV is processed in memory and is not retained by Voxfolio. A five-turn interview then captures the portfolio goal, primary audience, visual tone, motion preference and presentation emphasis. Those answers configure only allowlisted design fields; they never rewrite professional claims.
@@ -115,7 +135,13 @@ If AI extraction falls back, read the visible notice: it distinguishes a missing
 
 Open `http://localhost:3000` in Chrome or Edge. Microphone access requires HTTPS or localhost.
 
-Never prefix private AssemblyAI or OpenAI keys with `NEXT_PUBLIC_`, commit `.env.local`, or paste either key into client code.
+Never prefix private AssemblyAI, Gemini or OpenAI keys with `NEXT_PUBLIC_`, commit `.env.local`, or paste any key into client code.
+
+V19 makes Vox a synchronized multimodal editing assistant. Spoken and typed requests share the same allowlisted tools and validated command bus. Explicit navigation requests move both the Content editor and bounded Live Canvas; successful edits focus their affected section automatically. Gemini plans typed requests and is the primary fact-preserving copy refiner, while the existing OpenAI refinement path remains a recovery provider when configured. The transcript follows new messages automatically, pasted URLs are supported in text chat, and accessible sound cues can be muted from the assistant header. Keep `GEMINI_API_KEY` server-only and restart the dev server after changing it.
+
+V19.2 completes the real-time conversation and publication state model. Vox now renders a visible listening/responding indicator, replaces the user's live utterance as AssemblyAI sends `transcript.user.delta`, and appends agent words from `transcript.agent.delta` in sync with speech. Typed replies reveal progressively as well. Individual pages and articles are compared with the immutable live snapshot, so editing a published item immediately marks it as having pending changes and re-enables **Publish changes**. The main Publish dialog now queues behind autosave and publishes the complete latest portfolio snapshot instead of blocking indefinitely on an unsaved draft.
+
+V20 introduces opportunity variants for AI-native independent builders and makers. A canonical portfolio remains the approved evidence source. From **My projects**, create an Opportunity version with a title, audience and brief; Voxfolio creates a separate cloud project at revision zero, records its source revision, and lets the owner choose which existing case studies to feature. Variants have their own Studio, revision history, voice/text controls, publication state and public URL. They never automatically rewrite or silently refresh the canonical portfolio. Non-public variants emit `noindex`; signed/private sharing is a later hardening milestone.
 
 ## Voice commands to test
 
@@ -129,6 +155,9 @@ Never prefix private AssemblyAI or OpenAI keys with `NEXT_PUBLIC_`, commit `.env
 - “Move the Voxfolio project up.”
 - “Change my introduction to: I build accessible AI-powered digital products.”
 - “Undo that change.”
+- “Go to the About section.”
+- “Improve my introduction using these facts: …”
+- Type “Add my TikTok profile” and paste the full URL when Vox asks for it.
 
 Voice can update and reorder factual case-study content and draft structured pages or posts, but it is intentionally unable to publish, upload assets, execute arbitrary code or invent professional facts.
 

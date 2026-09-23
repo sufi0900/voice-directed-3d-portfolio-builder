@@ -1,6 +1,6 @@
 import type { SiteDocument } from "./site-document";
 
-export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth"] as const;
+export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier"] as const;
 export type TemplateId = typeof templateOptions[number];
 
 export type TemplateContract = {
@@ -41,6 +41,20 @@ export const TEMPLATE_CONTRACTS: readonly TemplateContract[] = [
     audience: "Writers, consultants and strategists",
     presentation: { accent: "coral", background: "plum", heroAlignment: "center", sceneFamily: "constellation-field", scenePreset: "minimal", motion: "calm", intensity: .7 },
   },
+  {
+    id: "kinetic-gallery",
+    name: "Kinetic Gallery",
+    description: "An editorial 3D gallery of suspended project panels and a luminous monolith—no orbital motifs.",
+    audience: "Designers, directors and visual storytellers",
+    presentation: { accent: "lime", background: "ink", heroAlignment: "left", sceneFamily: "kinetic-gallery", scenePreset: "architect", motion: "calm", intensity: .85 },
+  },
+  {
+    id: "velocity-atelier",
+    name: "Velocity Atelier",
+    description: "A night-showroom automotive stage with a sculpted GT coupe, cruising light streaks and cinematic 3D sections.",
+    audience: "Product designers, technologists and ambitious independent creators",
+    presentation: { accent: "coral", background: "ink", heroAlignment: "left", sceneFamily: "velocity-roadster", scenePreset: "minimal", motion: "dynamic", intensity: 1.05 },
+  },
 ] as const;
 
 export function getTemplateContract(id: TemplateId) {
@@ -52,6 +66,6 @@ export function applyTemplatePresentation(document: SiteDocument, id: TemplateId
   return {
     ...document,
     design: { template: id, accent: presentation.accent, background: presentation.background, heroAlignment: presentation.heroAlignment },
-    scene: { ...document.scene, family: presentation.sceneFamily, preset: presentation.scenePreset, motion: presentation.motion, intensity: presentation.intensity },
+    scene: { ...document.scene, family: presentation.sceneFamily, preset: presentation.scenePreset, motion: presentation.motion, intensity: presentation.intensity, focusedSkill: id === "velocity-atelier" ? null : document.scene.focusedSkill },
   };
 }

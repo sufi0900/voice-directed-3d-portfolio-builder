@@ -23,6 +23,7 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
   const [cvCandidates, setCvCandidates] = useState<Array<CvCandidate & { approved: boolean }>>([]);
   const [interview, setInterview] = useState<Partial<GuidedInterview>>({});
   const [form, setForm] = useState({ projectName: "", name: "", role: "", intro: "", skills: "", education: "" });
+  const selectedTemplate = PORTFOLIO_TEMPLATES.find((template) => template.id === templateId) ?? PORTFOLIO_TEMPLATES[0];
 
   async function create() {
     if (!authenticated) return router.push("/login");
@@ -107,8 +108,20 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
         {cvBusy && <div className="cv-processing" role="status" aria-live="polite"><span className="processing-orbit"><i /><i /><i /></span><strong>Analyzing your CV</strong><small>Reading its structure, identifying evidence, and preparing facts for your approval.</small></div>}
       </section>
       <GuidedInterviewPanel value={interview} onChange={setInterview} groundedFactCount={cvCandidates.filter((item) => item.approved).length} />
-    </div> : <div className="template-grid">{PORTFOLIO_TEMPLATES.map((template) => <button type="button" className={template.id === templateId ? "selected" : ""} key={template.id} onClick={() => setTemplateId(template.id)}><i>{template.mode.toUpperCase()}</i><h3>{template.name}</h3><p>{template.description}</p><small>{template.audience}</small></button>)}</div>}
+    </div> : <div className="template-selection-layout"><div className="template-grid">{PORTFOLIO_TEMPLATES.map((template) => <button type="button" aria-pressed={template.id === templateId} className={template.id === templateId ? "selected" : ""} key={template.id} onClick={() => setTemplateId(template.id)}><i>{template.mode.toUpperCase()}</i><h3>{template.name}</h3><p>{template.description}</p><small>{template.audience}</small></button>)}</div><TemplatePreview template={selectedTemplate} /></div>}
     {error && <div className="form-message">{error}</div>}
     <button className="primary-action" disabled={busy || !form.projectName || (mode === "guided" && (!form.name || !form.role || !form.intro || Object.keys(interview).length !== 5))} onClick={create}>{busy ? "Creating…" : authenticated ? "Create portfolio" : "Sign in to create"}</button>
   </section>;
+}
+
+function TemplatePreview({ template }: { template: (typeof PORTFOLIO_TEMPLATES)[number] }) {
+  const document = template.document;
+  return <aside className={`template-library-preview template-${template.id}`} data-accent={document.design.accent} aria-live="polite">
+    <header><div><span>SELECTED TEMPLATE</span><strong>{template.name}</strong></div><em>Responsive preview</em></header>
+    <div className="template-preview-viewport">
+      <nav><b>VF</b><span>About&nbsp;&nbsp; Skills&nbsp;&nbsp; Projects</span></nav>
+      <section className="template-preview-hero"><div><small>PORTFOLIO</small><h2>{document.identity.name}</h2><h3>{document.identity.role}</h3><p>{document.identity.intro}</p><button type="button" tabIndex={-1}>Explore work</button></div><div className={`template-preview-visual scene-${document.scene.family}`} aria-hidden="true"><i /><i /><i /><b /></div></section>
+      <div className="template-preview-sections"><article><span>01</span><strong>About</strong></article><article><span>02</span><strong>Selected work</strong></article><article><span>03</span><strong>Capabilities</strong></article></div>
+    </div>
+  </aside>;
 }

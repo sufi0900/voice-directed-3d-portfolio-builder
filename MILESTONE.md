@@ -1,3 +1,90 @@
+# Milestone 18 — Velocity Atelier automotive presentation
+
+## V18 completed capability
+
+- Replaced the unaccepted Aurora experiment with Velocity Atelier, a bright automotive concept that does not attach portfolio skills to the 3D object.
+- Added a procedural cinematic roadster, rotating wheels, flowing roadway, suspension/parallax motion, warm daylight lighting, soft contact shadows and an accessible static fallback.
+- Added an ivory presentation token and a distinct editorial showroom layout across creation preview, Studio and immutable public output.
+- Kept the same validated document, command, revision, publication, media and accessibility boundaries.
+
+## V18 owner acceptance gate
+
+- Switch from every existing template to Velocity Atelier and back; verify content, media, pages/posts and publication state remain identical.
+- Confirm the recognizable car, bright studio, editorial identity card and light content sections render in Studio and immutable public output.
+- Check pointer response, wheel/road motion, reduced-motion behavior and the static car fallback.
+- Verify desktop, tablet and mobile layouts retain reading order, contrast and usable controls without covering the vehicle.
+- Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm check:bundle` before deployment.
+
+---
+
+# Milestone 16 — Kinetic Gallery presentation system
+
+## V16 completed capability
+
+- Added Kinetic Gallery, a non-orbital 3D cinematic template built from suspended skill panels and a luminous central monolith.
+- Preserved the existing `SiteDocument`, typed-command, revision, publication, media, page/post and accessibility contracts.
+- Added an allowlisted Studio scene-family choice and voice template selection; neither introduces publication or upload authority.
+- Added reduced-motion behavior, a static WebGL fallback and a scene-specific Studio interaction hint.
+
+## V16 owner acceptance gate
+
+- Switch through all four templates and verify identity, sections, projects, media, pages, posts and publication status do not change.
+- Select Kinetic Gallery in creation and Studio; verify its responsive template preview, live canvas and public portfolio output.
+- Focus every skill panel and verify keyboard-accessible fallback controls still identify the selected skill.
+- Verify pointer parallax, reduced-motion mode, mobile layout and a forced WebGL fallback.
+- Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm check:bundle` before deployment.
+
+---
+
+# Milestone 15 — Final content publishing and launch gate
+
+## V15 completed capability
+
+- Preview now exits expanded-editor mode before rendering, preventing the editor-only workspace rule from hiding the live canvas.
+- The Studio navigation exposes one Blog destination whenever articles exist, and the Blog editor includes a dedicated listing preview.
+- Articles remain private drafts until explicitly published; publishing from the article editor saves the revision and refreshes the immutable portfolio snapshot automatically.
+- Article publication requires a title, unique public URL, excerpt, valid cover image, SEO title, SEO description and meaningful page content.
+- Published articles appear as cards on `/p/[portfolio-slug]/blog`; individual routes remain `/p/[portfolio-slug]/blog/[article-slug]` and never become separate top-level navigation tabs.
+- Contact supports up to ten governed social links across Facebook, Instagram, LinkedIn, X, YouTube, TikTok, GitHub, Website, Medium and Pinterest.
+- Social links are editable manually and by voice, remain revisioned and undoable, and render as accessible external icons in preview and immutable publications.
+
+## V15 final acceptance gate
+
+- Expand the editor, enter Preview and exit Preview repeatedly; confirm the canvas never becomes blank and the editor restores correctly.
+- Create multiple articles and confirm one Blog navigation item opens the complete listing preview.
+- Confirm incomplete articles cannot be published and each missing requirement is visibly identified.
+- Publish an article from its editor and confirm the saved immutable public snapshot, Blog listing and article route update without using the main Publish button.
+- Return an article to Draft and confirm it is removed after the automatic snapshot refresh.
+- Add, edit and remove every supported social platform; verify URL validation, keyboard focus, icon labels and external-link behavior.
+- Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm check:bundle`, then complete cross-device and authenticated browser testing against Supabase.
+
+---
+
+# Milestone 14 — Production-ready Studio and delivery gates
+
+## V14 completed capability
+
+- Expanded editing is now a dedicated, responsive authoring workspace: the live canvas, voice panel and resize handles are unmounted until the owner restores the three-panel Studio.
+- Preview mode is presentation-only and cannot expose or activate editor/assistant resizing controls.
+- Page Structure supports exact desktop drag-and-drop and touch/pen long-press placement, while retaining accessible arrow controls and the same validated revision history.
+- Voice section reordering accepts an exact target position and still cannot publish or bypass validation.
+- Template selection now includes a responsive, content-aware visual preview before project creation.
+- Editorial Depth uses its restrained interactive scene as a layered Hero background rather than an isolated block below the copy.
+- Added Open Graph/Twitter defaults, robots and sitemap endpoints, production security headers, and a repeatable JavaScript bundle budget.
+- Retained reduced-motion, static scene fallback, keyboard controls, immutable publication and recovery boundaries.
+
+## V14 acceptance gate
+
+- Expand and restore every editor tab; confirm Canvas/voice are absent while expanded and state is preserved.
+- Enter Preview mode at multiple panel widths; confirm no resize handles or assistant restoration controls exist.
+- Reorder all homepage sections by mouse, touch/pen long press, keyboard arrows and voice; confirm undo/history remain correct.
+- Select all templates before creation and verify each preview changes without loading a production WebGL canvas.
+- Verify Editorial Depth pointer interaction, text readability, mobile layout and reduced-motion fallback.
+- Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm check:bundle` before deployment.
+- Verify `/robots.txt`, `/sitemap.xml`, metadata cards, security headers and immutable public routes in the deployment environment.
+
+---
+
 # Milestone 13 — Reusable templates and scene architecture
 
 ## V13 completed capability

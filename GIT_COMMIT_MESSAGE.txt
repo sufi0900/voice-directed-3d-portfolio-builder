@@ -1,6 +1,1 @@
-feat(v13): introduce reusable templates and a second scene family
-
-- preserve portfolio content across three responsive template contracts
-- add the Constellation Field scene with governed manual and voice controls
-- redesign expanded Studio editing and responsive media presentation
-- fix Skills level contrast and retain accessibility fallbacks
+feat(voxfolio): add v23 selective opportunity source review

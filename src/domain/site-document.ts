@@ -1,15 +1,22 @@
 import { z } from "zod";
 
 export const accentOptions = ["cyan", "violet", "coral", "lime"] as const;
-export const backgroundOptions = ["midnight", "ink", "plum", "cloud"] as const;
+export const backgroundOptions = ["midnight", "ink", "plum", "cloud", "ivory"] as const;
 export const alignmentOptions = ["left", "center", "right"] as const;
 export const scenePresetOptions = ["cosmic", "architect", "minimal"] as const;
 export const motionOptions = ["calm", "dynamic", "still"] as const;
-export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth"] as const;
-export const sceneFamilyOptions = ["orbital-showcase", "constellation-field"] as const;
+export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier"] as const;
+export const sceneFamilyOptions = ["orbital-showcase", "constellation-field", "kinetic-gallery", "velocity-roadster"] as const;
 export const cvFactKindOptions = ["name", "role", "intro", "skill", "education", "experience"] as const;
 export const portfolioSectionOptions = ["about", "experience", "skills", "projects", "contact"] as const;
 export const structuredBlockTypeOptions = ["heading", "paragraph", "quote", "list", "ordered-list", "image"] as const;
+export const socialPlatformOptions = ["facebook", "instagram", "linkedin", "x", "youtube", "tiktok", "github", "website", "medium", "pinterest"] as const;
+export const opportunityStatusOptions = ["canonical", "draft", "review", "published", "archived"] as const;
+export const opportunityVisibilityOptions = ["private", "shared", "public"] as const;
+export const opportunityTypeOptions = ["freelance-proposal", "hackathon-submission", "accelerator-application", "partnership", "job-application", "contract-role", "custom"] as const;
+export type OpportunityType = typeof opportunityTypeOptions[number];
+
+const publicHttpUrl = z.string().url().refine((value) => value.startsWith("https://") || value.startsWith("http://"), "Use an http or https URL.");
 
 const structuredBlockSchema = z.object({
   id: z.string().min(1),
@@ -41,6 +48,56 @@ const blogPostSchema = publishableBaseSchema.extend({
   tags: z.array(z.string().trim().min(1).max(32)).max(8).default([]),
 });
 
+/**
+ * A variant is a separate, revisioned portfolio project.  It can never mutate
+ * its canonical portfolio implicitly: its source and brief are recorded here
+ * and the normal project/revision/publication pipeline owns all later edits.
+ */
+const opportunitySchema = z.object({
+  status: z.enum(opportunityStatusOptions).default("canonical"),
+  canonicalProjectId: z.string().uuid().nullable().default(null),
+  /** Alias used during variant creation; mirrors canonicalProjectId. */
+  variantOfProjectId: z.string().uuid().nullable().default(null),
+  sourceRevision: z.number().int().nonnegative().nullable().default(null),
+  /** Variant project name (internal Studio label). */
+  name: z.string().trim().max(80).default(""),
+  /** Opportunity type/category. */
+  type: z.enum(opportunityTypeOptions).default("custom"),
+  /** Human-readable opportunity title for the owner/review. */
+  title: z.string().trim().max(120).default(""),
+  /** Detailed opportunity brief from the owner. */
+  brief: z.string().trim().max(2_400).default(""),
+  /** Target audience for this variant. */
+  audience: z.string().trim().max(160).default(""),
+  /** High-level objective/goal. */
+  objective: z.string().trim().max(500).default(""),
+  /** Optional deadline (ISO date string). */
+  deadline: z.string().nullable().default(null),
+  /** Confidentiality level: private (default), public (indexable), or shared (unguessable link). */
+  confidentiality: z.enum(["private", "public", "shared"]).default("private"),
+  /** Visibility alias for backward compatibility; mirrors confidentiality. */
+  visibility: z.enum(opportunityVisibilityOptions).default("private"),
+  /** Project slug for public/shareable URL. */
+  slug: z.string().trim().max(80).default(""),
+  /** IDs of canonical projects selected for this variant. */
+  includedProjectIds: z.array(z.string().min(1)).max(8).default([]),
+  /** Owner's approval notes. */
+  approvalNotes: z.string().trim().max(1_200).default(""),
+  /** Override for hero introduction (tailored for this opportunity). */
+  heroOverride: z.string().trim().max(220).default(""),
+  /** Custom project order for this variant (subset of canonical project IDs). */
+  projectOrder: z.array(z.string().min(1)).max(8).default([]),
+  /** A compact immutable record used to explain exactly what the variant changed. */
+  sourceSnapshot: z.object({
+    name: z.string().trim().max(60),
+    role: z.string().trim().max(80),
+    intro: z.string().trim().max(220),
+    aboutHeading: z.string().trim().max(80),
+    aboutBody: z.string().trim().max(900),
+    projectIds: z.array(z.string().min(1)).max(8),
+  }).default({ name: "", role: "", intro: "", aboutHeading: "", aboutBody: "", projectIds: [] }),
+}).default({ status: "canonical", canonicalProjectId: null, variantOfProjectId: null, sourceRevision: null, name: "", type: "custom", title: "", brief: "", audience: "", objective: "", deadline: null, confidentiality: "private", visibility: "private", slug: "", includedProjectIds: [], approvalNotes: "", heroOverride: "", projectOrder: [], sourceSnapshot: { name: "", role: "", intro: "", aboutHeading: "", aboutBody: "", projectIds: [] } });
+
 export const DEFAULT_PORTFOLIO_CONTENT = {
   order: [...portfolioSectionOptions],
   visibility: { about: true, experience: true, skills: true, projects: true, contact: true },
@@ -48,7 +105,7 @@ export const DEFAULT_PORTFOLIO_CONTENT = {
   experience: [] as Array<{ id: string; role: string; organization: string; period: string; summary: string }>,
   education: [] as Array<{ id: string; credential: string; institution: string; period: string; summary: string }>,
   projects: [] as Array<{ id: string; title: string; summary: string; technologies: string[]; link: string; caseStudySlug: string; role: string; period: string; challenge: string; approach: string; outcome: string; mediaIds: string[] }>,
-  contact: { heading: "Let’s build something useful", email: "", location: "", cta: "Start a conversation" },
+  contact: { heading: "Let’s build something useful", email: "", location: "", cta: "Start a conversation", socials: [] as Array<{ id: string; platform: typeof socialPlatformOptions[number]; url: string }> },
 };
 
 const portfolioContentSchema = z.object({
@@ -71,7 +128,7 @@ const portfolioContentSchema = z.object({
     outcome: z.string().trim().max(1200).default(""),
     mediaIds: z.array(z.string().min(1)).max(8).default([]),
   })).max(8),
-  contact: z.object({ heading: z.string().trim().min(1).max(100), email: z.union([z.literal(""), z.string().email()]), location: z.string().trim().max(100), cta: z.string().trim().min(1).max(60) }),
+  contact: z.object({ heading: z.string().trim().min(1).max(100), email: z.union([z.literal(""), z.string().email()]), location: z.string().trim().max(100), cta: z.string().trim().min(1).max(60), socials: z.array(z.object({ id: z.string().min(1), platform: z.enum(socialPlatformOptions), url: publicHttpUrl })).max(10).default([]) }),
 });
 
 export const approvedCvFactSchema = z.object({
@@ -131,6 +188,7 @@ export const siteDocumentSchema = z.object({
     pages: z.array(customPageSchema).max(12).default([]),
     posts: z.array(blogPostSchema).max(24).default([]),
   }).default({ pages: [], posts: [] }),
+  opportunity: opportunitySchema,
   guidedInterview: z.object({
     goal: z.enum(["win-clients", "showcase-work", "find-role"]),
     audience: z.enum(["clients", "employers", "collaborators"]),
@@ -181,10 +239,11 @@ export const DEFAULT_SITE_DOCUMENT: SiteDocument = {
     projects: [
       { id: "project-1", title: "Voxfolio", summary: "A voice-directed portfolio builder with governed editing, revision history, and immutable publishing.", technologies: ["Next.js", "Supabase", "Three.js"], link: "", caseStudySlug: "voxfolio", role: "Product architecture and implementation", period: "2026", challenge: "Turn portfolio creation into a safe, editable workflow without allowing AI or voice commands to bypass validation.", approach: "Built one typed document and command pipeline shared by manual editing, voice tools, revisions, restoration, and publication.", outcome: "Created a reusable foundation for governed portfolio creation and immutable public releases.", mediaIds: [] },
     ],
-    contact: { heading: "Let’s build something useful", email: "", location: "Available remotely", cta: "Start a conversation" },
+    contact: { heading: "Let's build something useful", email: "", location: "Available remotely", cta: "Start a conversation", socials: [] },
   },
   media: { headshotUrl: "", headshotAlt: "", assets: [] },
   publishing: { pages: [], posts: [] },
+  opportunity: { status: "canonical", canonicalProjectId: null, variantOfProjectId: null, sourceRevision: null, name: "", type: "custom", title: "", brief: "", audience: "", objective: "", deadline: null, confidentiality: "private", visibility: "private", slug: "", includedProjectIds: [], approvalNotes: "", heroOverride: "", projectOrder: [], sourceSnapshot: { name: "", role: "", intro: "", aboutHeading: "", aboutBody: "", projectIds: [] } },
 };
 
 export function validateSiteDocument(value: unknown): SiteDocument {

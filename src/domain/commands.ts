@@ -7,11 +7,15 @@ import {
   portfolioSectionOptions,
   scenePresetOptions,
   sceneFamilyOptions,
+  socialPlatformOptions,
+  opportunityStatusOptions,
+  opportunityVisibilityOptions,
   templateOptions,
   siteDocumentSchema,
   type SiteDocument,
 } from "./site-document";
 import { applyTemplatePresentation } from "./template-contracts";
+import { reviewOpportunity } from "./opportunity-review";
 
 export const siteCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("identity.set"), field: z.enum(["name", "role", "intro", "availability"]), value: z.string() }),
@@ -29,8 +33,16 @@ export const siteCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("skill.remove"), skillId: z.string().min(1) }),
   z.object({ type: z.literal("content.setAbout"), field: z.enum(["heading", "body"]), value: z.string() }),
   z.object({ type: z.literal("content.setContact"), field: z.enum(["heading", "email", "location", "cta"]), value: z.string() }),
+  z.object({ type: z.literal("social.add"), platform: z.enum(socialPlatformOptions), url: z.string().url() }),
+  z.object({ type: z.literal("social.update"), itemId: z.string().min(1), platform: z.enum(socialPlatformOptions).optional(), url: z.string().url().optional() }).refine((value) => value.platform !== undefined || value.url !== undefined),
+  z.object({ type: z.literal("social.remove"), itemId: z.string().min(1) }),
+  z.object({ type: z.literal("opportunity.set"), field: z.enum(["title", "brief", "audience", "approvalNotes"]), value: z.string() }),
+  z.object({ type: z.literal("opportunity.setStatus"), status: z.enum(opportunityStatusOptions) }),
+  z.object({ type: z.literal("opportunity.setVisibility"), visibility: z.enum(opportunityVisibilityOptions) }),
+  z.object({ type: z.literal("opportunity.setIncludedProjects"), projectIds: z.array(z.string().min(1)).max(8) }),
   z.object({ type: z.literal("section.setVisible"), section: z.enum(portfolioSectionOptions), value: z.boolean() }),
   z.object({ type: z.literal("section.move"), section: z.enum(portfolioSectionOptions), direction: z.enum(["up", "down"]) }),
+  z.object({ type: z.literal("section.moveTo"), section: z.enum(portfolioSectionOptions), targetIndex: z.number().int().nonnegative() }),
   z.object({ type: z.literal("experience.add"), role: z.string().trim().min(1).max(100).optional(), organization: z.string().trim().max(100).optional(), period: z.string().trim().max(80).optional(), summary: z.string().trim().max(500).optional() }),
   z.object({ type: z.literal("experience.update"), itemId: z.string().min(1), field: z.enum(["role", "organization", "period", "summary"]), value: z.string() }),
   z.object({ type: z.literal("experience.remove"), itemId: z.string().min(1) }),
@@ -67,6 +79,16 @@ export type CommandReceipt = {
   summary: string;
   at: string;
 };
+
+export function formatCommandError(error: unknown) {
+  if (error instanceof z.ZodError) {
+    const issue = error.issues[0];
+    if (issue?.code === "too_big" && "maximum" in issue) return `That value is too long for this field (maximum ${issue.maximum} characters). Nothing was changed.`;
+    if (issue?.code === "too_small" && "minimum" in issue) return `That value is too short for this field (minimum ${issue.minimum} characters). Nothing was changed.`;
+    return issue?.message ? `${issue.message} Nothing was changed.` : "That change did not pass portfolio validation. Nothing was changed.";
+  }
+  return error instanceof Error ? error.message : "That change could not be validated. Nothing was changed.";
+}
 
 function nextRevision(document: SiteDocument) {
   return { revision: document.revision + 1, updatedAt: new Date().toISOString() };
@@ -143,6 +165,50 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       next = { ...current, content: { ...current.content, contact: { ...current.content.contact, [command.field]: value } }, ...nextRevision(current) };
       break;
     }
+    case "social.add": {
+      if (current.content.contact.socials.length >= 10) throw new Error("A portfolio can contain up to ten social links.");
+      if (!/^https?:\/\//i.test(command.url)) throw new Error("Social links must use http or https.");
+      next = { ...current, content: { ...current.content, contact: { ...current.content.contact, socials: [...current.content.contact.socials, { id: crypto.randomUUID(), platform: command.platform, url: command.url }] } }, ...nextRevision(current) };
+      break;
+    }
+    case "social.update": {
+      const item = current.content.contact.socials.find((entry) => entry.id === command.itemId);
+      if (!item) throw new Error("The requested social link does not exist.");
+      if (command.url && !/^https?:\/\//i.test(command.url)) throw new Error("Social links must use http or https.");
+      next = { ...current, content: { ...current.content, contact: { ...current.content.contact, socials: current.content.contact.socials.map((entry) => entry.id === item.id ? { ...entry, ...(command.platform ? { platform: command.platform } : {}), ...(command.url ? { url: command.url } : {}) } : entry) } }, ...nextRevision(current) };
+      break;
+    }
+    case "social.remove":
+      if (!current.content.contact.socials.some((entry) => entry.id === command.itemId)) throw new Error("The requested social link does not exist.");
+      next = { ...current, content: { ...current.content, contact: { ...current.content.contact, socials: current.content.contact.socials.filter((entry) => entry.id !== command.itemId) } }, ...nextRevision(current) };
+      break;
+    case "opportunity.set": {
+      if (current.opportunity.status === "canonical") throw new Error("Create an opportunity variant before adding an opportunity brief.");
+      const value = command.value.trim();
+      if (current.opportunity[command.field] === value) return current;
+      next = { ...current, opportunity: { ...current.opportunity, [command.field]: value }, ...nextRevision(current) };
+      break;
+    }
+    case "opportunity.setStatus":
+      if (current.opportunity.status === "canonical") throw new Error("The canonical portfolio cannot be converted into a variant from this control.");
+      if (command.status === "published") throw new Error("Use the owner-controlled Publish action to publish a variant. A status label does not create a public snapshot.");
+      if (current.opportunity.status === command.status) return current;
+      if (command.status === "review" && !reviewOpportunity(current).ready) throw new Error("Complete the title, audience, brief, and at least one approved case study before requesting review.");
+      next = { ...current, opportunity: { ...current.opportunity, status: command.status }, ...nextRevision(current) };
+      break;
+    case "opportunity.setVisibility":
+      if (current.opportunity.status === "canonical") throw new Error("Visibility is set on an opportunity variant only.");
+      if (current.opportunity.visibility === command.visibility) return current;
+      next = { ...current, opportunity: { ...current.opportunity, visibility: command.visibility }, ...nextRevision(current) };
+      break;
+    case "opportunity.setIncludedProjects": {
+      if (current.opportunity.status === "canonical") throw new Error("Project selection belongs to an opportunity variant.");
+      const projectIds = [...new Set(command.projectIds)];
+      if (projectIds.some((id) => !current.content.projects.some((project) => project.id === id))) throw new Error("An included project is not available in this portfolio.");
+      if (JSON.stringify(projectIds) === JSON.stringify(current.opportunity.includedProjectIds)) return current;
+      next = { ...current, opportunity: { ...current.opportunity, includedProjectIds: projectIds }, ...nextRevision(current) };
+      break;
+    }
     case "section.setVisible":
       if (current.content.visibility[command.section] === command.value) return current;
       next = { ...current, content: { ...current.content, visibility: { ...current.content.visibility, [command.section]: command.value } }, ...nextRevision(current) };
@@ -153,6 +219,17 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       if (target < 0 || target >= current.content.order.length) return current;
       const order = [...current.content.order];
       [order[index], order[target]] = [order[target], order[index]];
+      next = { ...current, content: { ...current.content, order }, ...nextRevision(current) };
+      break;
+    }
+    case "section.moveTo": {
+      const index = current.content.order.indexOf(command.section);
+      if (index < 0) throw new Error("The requested section does not exist.");
+      const target = Math.min(command.targetIndex, current.content.order.length - 1);
+      if (index === target) return current;
+      const order = [...current.content.order];
+      const [section] = order.splice(index, 1);
+      order.splice(target, 0, section);
       next = { ...current, content: { ...current.content, order }, ...nextRevision(current) };
       break;
     }
@@ -289,7 +366,15 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       const item = findPublishable(current, command.kind, command.itemId);
       if (!item) throw new Error(`The requested ${command.kind} does not exist.`);
       if (item.status === command.status) return current;
-      if (command.status === "published" && item.blocks.length === 0) throw new Error("Add at least one content block before publishing.");
+      if (command.status === "published") {
+        const hasContent = item.blocks.some((block) => block.type === "image" ? Boolean(block.mediaId) : block.type === "list" || block.type === "ordered-list" ? block.items.length > 0 : Boolean(block.text.trim()));
+        if (!hasContent) throw new Error("Add meaningful page content before publishing.");
+        if (command.kind === "post") {
+          const post = current.publishing.posts.find((entry) => entry.id === command.itemId)!;
+          const missing = [!post.title.trim() && "title", !post.slug.trim() && "public URL", !post.excerpt.trim() && "excerpt", !post.coverMediaId && "cover image", !post.seoTitle.trim() && "SEO title", !post.seoDescription.trim() && "SEO description"].filter(Boolean);
+          if (missing.length) throw new Error(`Complete the required article fields: ${missing.join(", ")}.`);
+        }
+      }
       const publishedAt = command.status === "published" ? new Date().toISOString() : null;
       next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, status: command.status, publishedAt })), ...nextRevision(current) };
       break;
@@ -373,8 +458,16 @@ export function describeCommand(command: SiteCommand, document: SiteDocument) {
     case "skill.remove": return "Removed a featured skill.";
     case "content.setAbout": return `Updated About ${command.field}.`;
     case "content.setContact": return `Updated Contact ${command.field}.`;
+    case "social.add": return `Added a ${command.platform} link.`;
+    case "social.update": return "Updated a social link.";
+    case "social.remove": return "Removed a social link.";
+    case "opportunity.set": return `Updated the opportunity ${command.field}.`;
+    case "opportunity.setStatus": return `Marked this opportunity variant as ${command.status}.`;
+    case "opportunity.setVisibility": return `Set opportunity visibility to ${command.visibility}.`;
+    case "opportunity.setIncludedProjects": return "Updated the projects selected for this opportunity.";
     case "section.setVisible": return `${command.value ? "Showed" : "Hid"} the ${command.section} section.`;
     case "section.move": return `Moved the ${command.section} section ${command.direction}.`;
+    case "section.moveTo": return `Moved the ${command.section} section to position ${command.targetIndex + 1}.`;
     case "experience.add": return "Added an experience entry.";
     case "experience.update": return "Updated an experience entry.";
     case "experience.remove": return "Removed an experience entry.";

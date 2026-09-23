@@ -1,18 +1,24 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, Plus, Share2, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import type { SiteCommand } from "@/domain/commands";
-import type { SiteDocument } from "@/domain/site-document";
+import { socialPlatformOptions, type PortfolioSection, type SiteDocument } from "@/domain/site-document";
 import { PublishingEditor } from "./publishing-editor";
 import { deriveImageAlt } from "@/domain/media";
 import { TEMPLATE_CONTRACTS } from "@/domain/template-contracts";
+import { reviewOpportunity } from "@/domain/opportunity-review";
+import { OpportunityPlanner } from "./opportunity-planner";
+import { OpportunitySourceReview } from "./opportunity-source-review";
+import { OpportunityShare } from "./opportunity-share";
+import { ProfessionalMemory } from "./professional-memory";
+import { AgentHealth } from "./agent-health";
 
 export type PreviewTarget = { section: string; itemId?: string };
-type Props = { document: SiteDocument; execute: (command: SiteCommand) => void; panel: "content" | "design" | "scene"; canUploadMedia?: boolean; previewTarget?: PreviewTarget; onPreviewTarget?: (target: PreviewTarget) => void };
+type Props = { document: SiteDocument; publishedDocument?: SiteDocument; execute: (command: SiteCommand) => void; panel: "content" | "design" | "scene"; canUploadMedia?: boolean; previewTarget?: PreviewTarget; onPreviewTarget?: (target: PreviewTarget) => void; onPublishItem?: (kind: "page" | "post", itemId: string, status: "draft" | "published") => void; publishingItemId?: string; itemPublishError?: string; canDirectPublish?: boolean };
 
-export function ManualControls({ document, execute, panel, canUploadMedia = false, previewTarget, onPreviewTarget }: Props) {
+export function ManualControls({ document, publishedDocument, execute, panel, canUploadMedia = false, previewTarget, onPreviewTarget, onPublishItem, publishingItemId = "", itemPublishError = "", canDirectPublish = false }: Props) {
   const [newSkill, setNewSkill] = useState("");
   const contentSection = previewTarget?.section ?? "hero";
   const selectContentSection = (section: string) => {
@@ -22,7 +28,7 @@ export function ManualControls({ document, execute, panel, canUploadMedia = fals
 
   if (panel === "content") return (
     <div className="control-stack">
-      <Select label="Editing" value={contentSection} options={["hero", "about", "experience", "education", "skills", "projects", "site pages", "blog posts", "contact", "page structure", "media library"]} onChange={selectContentSection} />
+      <Select label="Editing" value={contentSection} options={["hero", "about", "experience", "education", "skills", "projects", "opportunity", "site pages", "blog posts", "contact", "page structure", "media library"]} onChange={selectContentSection} />
       {contentSection === "hero" && <>
         <BufferedField label="Name" value={document.identity.name} maxLength={60} onCommit={(value) => execute({ type: "identity.set", field: "name", value })} />
         <BufferedField label="Professional role" value={document.identity.role} maxLength={80} onCommit={(value) => execute({ type: "identity.set", field: "role", value })} />
@@ -75,16 +81,18 @@ export function ManualControls({ document, execute, panel, canUploadMedia = fals
         <BufferedField label="Project URL" value={item.link} maxLength={300} allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "link", value })} />
         <ProjectGallery project={item} document={document} execute={execute} />
       </article>)}</section>}
+      {contentSection === "opportunity" && <><OpportunityEditor document={document} execute={execute} />{canUploadMedia && <><ProfessionalMemory document={document} /><AgentHealth projectId={document.projectId} /></>}{document.opportunity.status !== "canonical" && <><OpportunitySourceReview document={document} /><OpportunityPlanner document={document} execute={execute} enabled={canUploadMedia} />{canUploadMedia && <OpportunityShare document={document} publishedDocument={publishedDocument} />}</>}</>}
       {contentSection === "media library" && <MediaLibrary document={document} execute={execute} enabled={canUploadMedia} />}
-      {contentSection === "site pages" && <PublishingEditor key="site-pages" document={document} execute={execute} kind="page" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "site pages", itemId })} />}
-      {contentSection === "blog posts" && <PublishingEditor key="blog-posts" document={document} execute={execute} kind="post" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "blog posts", itemId })} />}
+      {contentSection === "site pages" && <PublishingEditor key="site-pages" document={document} publishedDocument={publishedDocument} execute={execute} kind="page" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "site pages", itemId })} onPublishItem={onPublishItem} publishingItemId={publishingItemId} publishError={itemPublishError} canDirectPublish={canDirectPublish} />}
+      {contentSection === "blog posts" && <PublishingEditor key="blog-posts" document={document} publishedDocument={publishedDocument} execute={execute} kind="post" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId === "__index__" ? undefined : previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "blog posts", itemId })} onPreviewListing={() => onPreviewTarget?.({ section: "blog posts", itemId: "__index__" })} onPublishItem={onPublishItem} publishingItemId={publishingItemId} publishError={itemPublishError} canDirectPublish={canDirectPublish} />}
       {contentSection === "contact" && <>
         <BufferedField label="Section heading" value={document.content.contact.heading} maxLength={100} onCommit={(value) => execute({ type: "content.setContact", field: "heading", value })} />
         <BufferedField label="Email" value={document.content.contact.email} maxLength={120} allowEmpty onCommit={(value) => execute({ type: "content.setContact", field: "email", value })} />
         <BufferedField label="Location" value={document.content.contact.location} maxLength={100} allowEmpty onCommit={(value) => execute({ type: "content.setContact", field: "location", value })} />
         <BufferedField label="Button label" value={document.content.contact.cta} maxLength={60} onCommit={(value) => execute({ type: "content.setContact", field: "cta", value })} />
+        <SocialLinksEditor document={document} execute={execute} />
       </>}
-      {contentSection === "page structure" && <section className="section-manager"><p>Reorder sections or hide them from the live portfolio.</p>{document.content.order.map((section, index) => <div key={section}><span>{section}</span><button type="button" disabled={index === 0} aria-label={`Move ${section} up`} onClick={() => execute({ type: "section.move", section, direction: "up" })}><ArrowUp size={14} /></button><button type="button" disabled={index === document.content.order.length - 1} aria-label={`Move ${section} down`} onClick={() => execute({ type: "section.move", section, direction: "down" })}><ArrowDown size={14} /></button><button type="button" aria-label={`${document.content.visibility[section] ? "Hide" : "Show"} ${section}`} onClick={() => execute({ type: "section.setVisible", section, value: !document.content.visibility[section] })}>{document.content.visibility[section] ? <Eye size={14} /> : <EyeOff size={14} />}</button></div>)}</section>}
+      {contentSection === "page structure" && <PageStructureEditor document={document} execute={execute} />}
       <p className="guardrail-note">Text edits save when you leave a field or five seconds after typing stops. This keeps undo history meaningful.</p>
     </div>
   );
@@ -101,7 +109,7 @@ export function ManualControls({ document, execute, panel, canUploadMedia = fals
 
   return (
     <div className="control-stack">
-      <Select label="Scene family" value={document.scene.family} options={["orbital-showcase", "constellation-field"]} onChange={(value) => execute({ type: "scene.setFamily", value: value as never })} />
+      <Select label="Scene family" value={document.scene.family} options={["orbital-showcase", "constellation-field", "kinetic-gallery", "velocity-roadster"]} onChange={(value) => execute({ type: "scene.setFamily", value: value as never })} />
       <Select label="Scene preset" value={document.scene.preset} options={["cosmic", "architect", "minimal"]} onChange={(value) => execute({ type: "scene.setPreset", value: value as never })} />
       <Select label="Motion" value={document.scene.motion} options={["calm", "dynamic", "still"]} onChange={(value) => execute({ type: "scene.setMotion", value: value as never })} />
       <Field label={`Visual intensity · ${Math.round(document.scene.intensity * 100)}%`}><input type="range" min="0.4" max="1.4" step="0.1" value={document.scene.intensity} onChange={(event) => execute({ type: "scene.setIntensity", value: Number(event.target.value) })} /></Field>
@@ -109,6 +117,42 @@ export function ManualControls({ document, execute, panel, canUploadMedia = fals
       <p className="guardrail-note">The scene is parameter-driven. Voice and manual controls never generate or execute Three.js code.</p>
     </div>
   );
+}
+
+function SocialLinksEditor({ document, execute }: { document: SiteDocument; execute: (command: SiteCommand) => void }) {
+  const [platform, setPlatform] = useState<(typeof socialPlatformOptions)[number]>("linkedin");
+  const [url, setUrl] = useState("");
+  const validUrl = /^https?:\/\/[^\s]+$/i.test(url.trim());
+  const add = () => { if (!validUrl) return; execute({ type: "social.add", platform, url: url.trim() }); setUrl(""); };
+  return <section className="social-editor"><header><div><Share2 size={16} /><span><strong>Social profiles</strong><small>Clickable icons appear in the Contact section.</small></span></div><em>{document.content.contact.socials.length}/10</em></header><div className="social-list">{document.content.contact.socials.map((item) => <article key={item.id}><select aria-label="Social platform" value={item.platform} onChange={(event) => execute({ type: "social.update", itemId: item.id, platform: event.target.value as typeof item.platform })}>{socialPlatformOptions.map((option) => <option key={option} value={option}>{option[0].toUpperCase() + option.slice(1)}</option>)}</select><BufferedInput ariaLabel={`${item.platform} URL`} value={item.url} maxLength={300} onCommit={(value) => { if (/^https?:\/\/[^\s]+$/i.test(value)) execute({ type: "social.update", itemId: item.id, url: value }); }} /><button type="button" className="icon-action danger" aria-label={`Remove ${item.platform} link`} onClick={() => execute({ type: "social.remove", itemId: item.id })}><Trash2 size={15} /></button></article>)}</div><div className="social-add"><select aria-label="New social platform" value={platform} onChange={(event) => setPlatform(event.target.value as typeof platform)}>{socialPlatformOptions.map((option) => <option key={option} value={option}>{option[0].toUpperCase() + option.slice(1)}</option>)}</select><input aria-label="Social profile URL" type="url" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); add(); } }} /><button type="button" disabled={!validUrl || document.content.contact.socials.length >= 10} onClick={add}><Plus size={14} />Add</button></div>{url && !validUrl && <small className="field-error">Use a complete URL beginning with https:// or http://.</small>}</section>;
+}
+
+function OpportunityEditor({ document, execute }: { document: SiteDocument; execute: (command: SiteCommand) => void }) {
+  const variant = document.opportunity;
+  if (variant.status === "canonical") return <section className="opportunity-editor"><header><div><strong>Opportunity versions</strong><small>Start from this approved canonical portfolio, then tailor a separate reviewable version.</small></div></header><p className="guardrail-note">Opportunity variants are created from <strong>My projects</strong>. They preserve this portfolio as the source of truth and can be published to their own URL only after your review.</p><button type="button" className="secondary-action" onClick={() => window.location.assign("/projects")}>Open My projects</button></section>;
+  const selected = new Set(variant.includedProjectIds);
+  const review = reviewOpportunity(document);
+  const toggleProject = (id: string) => {
+    const next = selected.has(id) ? [...selected].filter((item) => item !== id) : [...selected, id];
+    execute({ type: "opportunity.setIncludedProjects", projectIds: next });
+  };
+  return <section className="opportunity-editor"><header><div><strong>Opportunity version</strong><small>Source revision {variant.sourceRevision ?? "—"} · changes stay isolated until you publish this variant.</small></div><em>{variant.status}</em></header><BufferedField label="Opportunity title" value={variant.title} maxLength={120} onCommit={(value) => execute({ type: "opportunity.set", field: "title", value })} /><BufferedField label="Audience" value={variant.audience} maxLength={160} allowEmpty onCommit={(value) => execute({ type: "opportunity.set", field: "audience", value })} /><BufferedField label="Brief" value={variant.brief} maxLength={2400} multiline onCommit={(value) => execute({ type: "opportunity.set", field: "brief", value })} /><section className="opportunity-review" aria-label="Opportunity review"><header><div><strong>Review before publishing</strong><small>Only this independent version changes; the canonical portfolio remains untouched.</small></div><em className={review.ready ? "ready" : ""}>{review.ready ? "Ready" : "Incomplete"}</em></header><ul>{review.checks.map((check) => <li key={check.label} className={check.complete ? "complete" : ""}><span aria-hidden="true">{check.complete ? "✓" : ""}</span>{check.label}</li>)}</ul>{review.sourceAvailable ? <div className="opportunity-diff"><strong>Difference from source</strong>{review.changes.map((change) => <p key={change}>{change}</p>)}</div> : <p className="opportunity-legacy-note">This older variant has no source snapshot. Its approval checklist still applies; create a new variant for a complete source comparison.</p>}</section><Field label="Review status"><select value={variant.status} onChange={(event) => execute({ type: "opportunity.setStatus", status: event.target.value as "draft" | "review" | "published" | "archived" })}><option value="draft">Draft</option><option value="review" disabled={!review.ready}>Ready for review</option><option value="published">Published</option><option value="archived">Archived</option></select></Field><Field label="Share visibility"><select value={variant.visibility} onChange={(event) => execute({ type: "opportunity.setVisibility", visibility: event.target.value as "private" | "shared" | "public" })}><option value="private">Private</option><option value="shared">Shareable after publishing</option><option value="public">Public after publishing</option></select></Field><div className="opportunity-projects"><strong>Evidence to feature</strong><small>Select only existing approved case studies. This does not delete projects from the canonical portfolio.</small>{document.content.projects.map((project) => <label key={project.id}><input type="checkbox" checked={selected.has(project.id)} onChange={() => toggleProject(project.id)} />{project.title}</label>)}</div><BufferedField label="Owner approval notes" value={variant.approvalNotes} maxLength={1200} multiline allowEmpty onCommit={(value) => execute({ type: "opportunity.set", field: "approvalNotes", value })} /><p className="guardrail-note">The agent may propose copy and ordering, but only your approved portfolio evidence is available to this version. Publishing remains an explicit owner action.</p></section>;
+}
+
+function PageStructureEditor({ document, execute }: { document: SiteDocument; execute: (command: SiteCommand) => void }) {
+  const [dragging, setDragging] = useState<PortfolioSection | null>(null);
+  const [over, setOver] = useState<PortfolioSection | null>(null);
+  const longPress = useRef<number | null>(null);
+  const finish = (target = over) => {
+    if (dragging && target) execute({ type: "section.moveTo", section: dragging, targetIndex: document.content.order.indexOf(target) });
+    setDragging(null); setOver(null);
+    if (longPress.current) window.clearTimeout(longPress.current);
+    longPress.current = null;
+  };
+  return <section className="section-manager"><p>Drag sections into the order you want. Arrow controls remain available for keyboard users.</p>{document.content.order.map((section, index) => <div key={section} data-section={section} className={`${dragging === section ? "dragging" : ""} ${over === section ? "drop-target" : ""}`} draggable onDragStart={(event) => { setDragging(section); event.dataTransfer.effectAllowed = "move"; }} onDragOver={(event) => { event.preventDefault(); setOver(section); }} onDrop={(event) => { event.preventDefault(); finish(section); }} onDragEnd={() => finish(null)}>
+    <button type="button" className="section-drag-handle" aria-label={`Drag ${section} to reorder`} onPointerDown={(event) => { if (event.pointerType === "mouse") return; longPress.current = window.setTimeout(() => setDragging(section), 350); }} onPointerMove={(event) => { if (!dragging || event.pointerType === "mouse") return; const target = globalThis.document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-section]")?.dataset.section as PortfolioSection | undefined; if (target) setOver(target); }} onPointerUp={() => finish()} onPointerCancel={() => finish(null)}><GripVertical size={15} /></button>
+    <span>{section}</span><button type="button" disabled={index === 0} aria-label={`Move ${section} up`} onClick={() => execute({ type: "section.move", section, direction: "up" })}><ArrowUp size={14} /></button><button type="button" disabled={index === document.content.order.length - 1} aria-label={`Move ${section} down`} onClick={() => execute({ type: "section.move", section, direction: "down" })}><ArrowDown size={14} /></button><button type="button" aria-label={`${document.content.visibility[section] ? "Hide" : "Show"} ${section}`} onClick={() => execute({ type: "section.setVisible", section, value: !document.content.visibility[section] })}>{document.content.visibility[section] ? <Eye size={14} /> : <EyeOff size={14} />}</button>
+  </div>)}</section>;
 }
 
 function MediaLibrary({ document, execute, enabled }: { document: SiteDocument; execute: (command: SiteCommand) => void; enabled: boolean }) {

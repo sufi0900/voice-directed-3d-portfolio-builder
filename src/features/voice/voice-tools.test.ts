@@ -4,6 +4,19 @@ import { DEFAULT_SITE_DOCUMENT, type SiteDocument } from "@/domain/site-document
 import { runVoiceTool } from "./voice-tools";
 
 describe("voice tools", () => {
+  it("navigates the Studio and canvas without creating a revision", async () => {
+    const result = await runVoiceTool("navigate_to", { destination: "about" }, () => undefined, () => undefined);
+    expect(result).toEqual({ ok: true, message: "Opened About in the Studio and Live Canvas.", navigation: { section: "about", panel: "content" } });
+  });
+
+  it("returns the edited section so the interface can follow voice changes", async () => {
+    let document: SiteDocument = DEFAULT_SITE_DOCUMENT;
+    const execute = (command: SiteCommand) => { document = applySiteCommand(document, command); };
+    const result = await runVoiceTool("update_text_content", { target: "about_heading", text: "My story" }, execute, () => undefined);
+    expect(result.ok && result.navigation).toEqual({ section: "about", panel: "content" });
+    expect(document.content.about.heading).toBe("My story");
+  });
+
   it("routes an approved theme request through site commands", async () => {
     let document: SiteDocument = DEFAULT_SITE_DOCUMENT;
     const execute = (command: SiteCommand) => { document = applySiteCommand(document, command); };
@@ -29,6 +42,22 @@ describe("voice tools", () => {
     expect(result.ok).toBe(true);
     expect(document.design.template).toBe("editorial-depth");
     expect(document.content.projects).toEqual(originalProjects);
+  });
+
+  it("allows voice to select Kinetic Gallery without granting any extra authority", async () => {
+    let document: SiteDocument = DEFAULT_SITE_DOCUMENT;
+    const execute = (command: SiteCommand) => { document = applySiteCommand(document, command); };
+    const result = await runVoiceTool("set_portfolio_template", { template: "kinetic-gallery" }, execute, () => undefined);
+    expect(result.ok).toBe(true);
+    expect(document.scene.family).toBe("kinetic-gallery");
+  });
+
+  it("allows voice to select Velocity Atelier through the existing template command", async () => {
+    let document: SiteDocument = DEFAULT_SITE_DOCUMENT;
+    const execute = (command: SiteCommand) => { document = applySiteCommand(document, command); };
+    const result = await runVoiceTool("set_portfolio_template", { template: "velocity-atelier" }, execute, () => undefined);
+    expect(result.ok).toBe(true);
+    expect(document.scene.family).toBe("velocity-roadster");
   });
 
   it("does not expose a publish tool", async () => {
@@ -77,5 +106,21 @@ describe("voice tools", () => {
     expect(document.publishing.posts[0]).toMatchObject({ status: "draft", title: "Practical AI systems" });
     expect(document.publishing.posts[0].blocks[0].text).toBe("A governed approach to useful AI.");
     expect(await runVoiceTool("publishing.setStatus", {}, execute, () => undefined)).toEqual({ ok: false, error: "Unsupported tool: publishing.setStatus." });
+  });
+
+  it("can place a homepage section at an exact position", async () => {
+    let document: SiteDocument = DEFAULT_SITE_DOCUMENT;
+    const execute = (command: SiteCommand) => { document = applySiteCommand(document, command); };
+    const result = await runVoiceTool("set_section", { section: "contact", target_index: 1 }, execute, () => undefined);
+    expect(result.ok).toBe(true);
+    expect(document.content.order).toEqual(["about", "contact", "experience", "skills", "projects"]);
+  });
+
+  it("can manage a Contact social profile without publishing", async () => {
+    let document: SiteDocument = DEFAULT_SITE_DOCUMENT;
+    const execute = (command: SiteCommand) => { document = applySiteCommand(document, command); };
+    const result = await runVoiceTool("manage_social_link", { action: "add", platform: "linkedin", url: "https://linkedin.com/in/example" }, execute, () => undefined);
+    expect(result.ok).toBe(true);
+    expect(document.content.contact.socials[0]).toMatchObject({ platform: "linkedin", url: "https://linkedin.com/in/example" });
   });
 });

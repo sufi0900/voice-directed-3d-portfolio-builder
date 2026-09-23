@@ -2,10 +2,11 @@ import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import Image from "next/image";
 import type { SiteDocument } from "@/domain/site-document";
 
-export function PublicCaseStudy({ document, portfolioSlug, project }: { document: SiteDocument; portfolioSlug: string; project: SiteDocument["content"]["projects"][number] }) {
+export function PublicCaseStudy({ document, portfolioSlug, project, basePath }: { document: SiteDocument; portfolioSlug: string; project: SiteDocument["content"]["projects"][number]; basePath?: string }) {
+  const path = basePath ?? `/p/${portfolioSlug}`;
   const gallery = project.mediaIds.map((id) => document.media.assets.find((asset) => asset.id === id)).filter((asset): asset is SiteDocument["media"]["assets"][number] => Boolean(asset));
   return <main className={`case-study-page bg-${document.design.background}`} data-accent={document.design.accent}>
-    <header className="case-study-nav"><a href={`/p/${portfolioSlug}`}><ArrowLeft size={16} />{document.identity.name}</a>{project.link && <a href={project.link} target="_blank" rel="noreferrer">Visit project <ArrowUpRight size={15} /></a>}</header>
+    <header className="case-study-nav"><a href={path}><ArrowLeft size={16} />{document.identity.name}</a>{project.link && <a href={project.link} target="_blank" rel="noreferrer">Visit project <ArrowUpRight size={15} /></a>}</header>
     <article className="case-study-shell">
       <header className="case-study-hero"><p className="section-eyebrow">PROJECT CASE STUDY</p><h1>{project.title}</h1><p>{project.summary}</p><dl>{project.role && <div><dt>Role</dt><dd>{project.role}</dd></div>}{project.period && <div><dt>Period</dt><dd>{project.period}</dd></div>}{project.technologies.length > 0 && <div><dt>Stack</dt><dd>{project.technologies.join(" · ")}</dd></div>}</dl></header>
       {gallery[0] && <figure className="case-study-cover"><Image src={gallery[0].url} alt={gallery[0].alt} fill sizes="(max-width: 900px) 94vw, 1120px" priority unoptimized /></figure>}
@@ -15,7 +16,7 @@ export function PublicCaseStudy({ document, portfolioSlug, project }: { document
         {project.outcome && <section><p className="section-eyebrow">THE OUTCOME</p><h2>What the work delivered</h2><p>{project.outcome}</p></section>}
       </div>
       {gallery.length > 1 && <section className="case-study-gallery" aria-label="Project gallery">{gallery.slice(1).map((asset) => <figure key={asset.id}><Image src={asset.url} alt={asset.alt} fill sizes="(max-width: 720px) 94vw, 520px" unoptimized /><figcaption>{asset.alt}</figcaption></figure>)}</section>}
-      <footer className="case-study-footer"><a href={`/p/${portfolioSlug}#projects`}><ArrowLeft size={16} />Back to all projects</a></footer>
+      <footer className="case-study-footer"><a href={`${path}#projects`}><ArrowLeft size={16} />Back to all projects</a></footer>
     </article>
   </main>;
 }

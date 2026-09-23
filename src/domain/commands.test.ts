@@ -25,6 +25,25 @@ describe("site command bus", () => {
     expect(switched.revision).toBe(1);
   });
 
+  it("applies the non-orbital kinetic gallery through the same governed command", () => {
+    const contentBefore = structuredClone(DEFAULT_SITE_DOCUMENT.content);
+    const switched = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "design.setTemplate", value: "kinetic-gallery" });
+    expect(switched.scene.family).toBe("kinetic-gallery");
+    expect(switched.content).toEqual(contentBefore);
+    expect(switched.revision).toBe(1);
+  });
+
+  it("applies Velocity Atelier as a bright automotive presentation without content loss", () => {
+    const identityBefore = structuredClone(DEFAULT_SITE_DOCUMENT.identity);
+    const projectsBefore = structuredClone(DEFAULT_SITE_DOCUMENT.content.projects);
+    const switched = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "design.setTemplate", value: "velocity-atelier" });
+    expect(switched.scene.family).toBe("velocity-roadster");
+    expect(switched.design.background).toBe("ink");
+    expect(switched.scene.focusedSkill).toBeNull();
+    expect(switched.identity).toEqual(identityBefore);
+    expect(switched.content.projects).toEqual(projectsBefore);
+  });
+
   it("upgrades pre-V13 presentation data with compatible defaults", () => {
     const legacy = structuredClone(DEFAULT_SITE_DOCUMENT) as unknown as { design: Record<string, unknown>; scene: Record<string, unknown> };
     delete legacy.design.template;
@@ -41,6 +60,15 @@ describe("site command bus", () => {
     const undone = studioReducer(changed, { type: "undo", source: "voice" });
     expect(changed.present.scene.preset).toBe("architect");
     expect(undone.present.scene.preset).toBe("cosmic");
+  });
+
+  it("contains invalid assistant output instead of crashing the Studio", () => {
+    const state = studioReducer(initialStudioState, {
+      type: "execute", source: "voice", command: { type: "identity.set", field: "role", value: "x".repeat(81) },
+    });
+    expect(state.present).toBe(initialStudioState.present);
+    expect(state.lastCommandError).toContain("maximum 80 characters");
+    expect(state.past).toEqual([]);
   });
 
   it("refuses to focus a missing skill", () => {
@@ -129,11 +157,25 @@ describe("site command bus", () => {
     expect(upgraded.publishing).toEqual({ pages: [], posts: [] });
   });
 
+  it("upgrades an earlier document to a canonical opportunity safely", () => {
+    const legacy = structuredClone(DEFAULT_SITE_DOCUMENT) as unknown as Record<string, unknown>;
+    delete legacy.opportunity;
+    expect(validateSiteDocument(legacy).opportunity).toMatchObject({ status: "canonical", canonicalProjectId: null });
+  });
+
+  it("keeps opportunity-variant decisions in the validated command pipeline", () => {
+    const variant = validateSiteDocument({ ...DEFAULT_SITE_DOCUMENT, projectId: "63531bc7-6833-4e22-981f-08e97a9731f9", opportunity: { status: "draft", canonicalProjectId: "ae2655b1-7a26-4dfe-a1ea-2e1945963ed5", sourceRevision: 12, title: "AI builder role", brief: "Emphasise approved product-system evidence.", audience: "Hiring team", visibility: "private", includedProjectIds: [], approvalNotes: "" } });
+    const selected = applySiteCommand(variant, { type: "opportunity.setIncludedProjects", projectIds: [variant.content.projects[0].id] });
+    const reviewed = applySiteCommand(selected, { type: "opportunity.setStatus", status: "review" });
+    expect(reviewed.opportunity).toMatchObject({ status: "review", includedProjectIds: [variant.content.projects[0].id] });
+    expect(() => applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "opportunity.set", field: "brief", value: "Do not change the source." })).toThrow("Create an opportunity variant");
+  });
+
   it("creates a structured page draft and requires content before publishing", () => {
     const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "publishing.add", kind: "page", title: "Services" });
     const page = added.publishing.pages[0];
     expect(page).toMatchObject({ title: "Services", slug: "services", status: "draft" });
-    expect(() => applySiteCommand(added, { type: "publishing.setStatus", kind: "page", itemId: page.id, status: "published" })).toThrow("content block");
+    expect(() => applySiteCommand(added, { type: "publishing.setStatus", kind: "page", itemId: page.id, status: "published" })).toThrow("meaningful page content");
     const withBlock = applySiteCommand(added, { type: "block.add", kind: "page", itemId: page.id, blockType: "paragraph" });
     const block = withBlock.publishing.pages[0].blocks[0];
     const written = applySiteCommand(withBlock, { type: "block.update", kind: "page", itemId: page.id, blockId: block.id, field: "text", value: "A focused portfolio service." });
@@ -177,5 +219,30 @@ describe("site command bus", () => {
     const heading = withHeading.publishing.posts[0].blocks[0];
     const updated = applySiteCommand(withHeading, { type: "block.update", kind: "post", itemId: post.id, blockId: heading.id, field: "headingLevel", value: "h4" });
     expect(updated.publishing.posts[0].blocks[0].headingLevel).toBe("h4");
+  });
+
+  it("reorders homepage sections to an exact drag target", () => {
+    const moved = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "section.moveTo", section: "contact", targetIndex: 1 });
+    expect(moved.content.order).toEqual(["about", "contact", "experience", "skills", "projects"]);
+    expect(moved.revision).toBe(DEFAULT_SITE_DOCUMENT.revision + 1);
+  });
+
+  it("requires complete article metadata and content before publishing", () => {
+    const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "publishing.add", kind: "post", title: "Release notes" });
+    const post = added.publishing.posts[0];
+    expect(() => applySiteCommand(added, { type: "publishing.setStatus", kind: "post", itemId: post.id, status: "published" })).toThrow("meaningful page content");
+    const withBlock = applySiteCommand(added, { type: "block.add", kind: "post", itemId: post.id, blockType: "paragraph" });
+    const block = withBlock.publishing.posts[0].blocks[0];
+    const written = applySiteCommand(withBlock, { type: "block.update", kind: "post", itemId: post.id, blockId: block.id, field: "text", value: "A complete article." });
+    expect(() => applySiteCommand(written, { type: "publishing.setStatus", kind: "post", itemId: post.id, status: "published" })).toThrow("excerpt");
+  });
+
+  it("adds, updates and removes governed Contact social links", () => {
+    const added = applySiteCommand(DEFAULT_SITE_DOCUMENT, { type: "social.add", platform: "linkedin", url: "https://linkedin.com/in/example" });
+    const social = added.content.contact.socials[0];
+    expect(social.platform).toBe("linkedin");
+    const updated = applySiteCommand(added, { type: "social.update", itemId: social.id, platform: "website", url: "https://example.com" });
+    expect(updated.content.contact.socials[0]).toMatchObject({ platform: "website", url: "https://example.com" });
+    expect(applySiteCommand(updated, { type: "social.remove", itemId: social.id }).content.contact.socials).toEqual([]);
   });
 });
