@@ -20,16 +20,14 @@ const base = (overrides: Partial<SiteDocument>): SiteDocument => ({
   skills: overrides.skills ?? DEFAULT_SITE_DOCUMENT.skills,
 });
 
-export const PORTFOLIO_TEMPLATES: PortfolioTemplate[] = [
-  ...TEMPLATE_CONTRACTS.map((template) => ({
-    id: template.id,
-    name: template.name,
-    description: template.description,
-    mode: template.id === "professional-light" ? "2d" : "3d",
-    audience: template.audience,
-    document: base({ design: { template: template.id, accent: template.presentation.accent, background: template.presentation.background, heroAlignment: template.presentation.heroAlignment }, scene: { ...DEFAULT_SITE_DOCUMENT.scene, family: template.presentation.sceneFamily, preset: template.presentation.scenePreset, motion: template.presentation.motion, intensity: template.presentation.intensity, focusedSkill: null } }),
-  })),
-];
+export const PORTFOLIO_TEMPLATES: PortfolioTemplate[] = TEMPLATE_CONTRACTS.map((template) => ({
+  id: template.id,
+  name: template.name,
+  description: template.description,
+  mode: template.mode as "3d" | "2d", // Add type assertion here
+  audience: template.audience,
+  document: template.document,
+}));
 
 export function getTemplate(id: string) {
   return PORTFOLIO_TEMPLATES.find((template) => template.id === id);
