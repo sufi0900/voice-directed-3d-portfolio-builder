@@ -1,0 +1,22 @@
+/* V25.2 — restrained light 2D professional presentation. */
+.professional-light-site { min-height: 100vh; color: #172033; background: #f7f8fb; font-family: var(--font-sans, Arial, sans-serif); }
+.professional-light-nav { display:flex; align-items:center; justify-content:space-between; gap:2rem; max-width:1180px; margin:0 auto; padding:1.4rem 2rem; border-bottom:1px solid #e5e7eb; }
+.professional-light-brand { display:flex; align-items:center; gap:.75rem; color:#172033; text-decoration:none; font-weight:700; }
+.professional-light-brand span,.professional-light-profile span { display:grid; place-items:center; width:2.5rem; height:2.5rem; border-radius:50%; color:#fff; background:#3157d5; font-size:.8rem; }
+.professional-light-nav .portfolio-site-nav { color:#526075; }
+.professional-light-nav .portfolio-site-nav a { color:inherit; }
+.professional-light-hero { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(220px,.6fr); gap:3rem; max-width:1180px; margin:0 auto; padding:7rem 2rem 6rem; align-items:center; }
+.professional-light-kicker { color:#3157d5; font-size:.75rem; font-weight:800; letter-spacing:.14em; }
+.professional-light-hero h1 { max-width:850px; margin:.5rem 0; color:#172033; font-size:clamp(3.2rem,8vw,6.8rem); line-height:.95; letter-spacing:-.07em; }
+.professional-light-hero h2 { margin:1rem 0; color:#526075; font-size:clamp(1.25rem,2vw,1.8rem); font-weight:500; }
+.professional-light-hero p:not(.professional-light-kicker) { max-width:650px; color:#526075; font-size:1.1rem; line-height:1.8; }
+.professional-light-button { display:inline-block; margin-top:1.5rem; padding:.85rem 1.2rem; border-radius:999px; color:#fff; background:#3157d5; text-decoration:none; font-weight:700; }
+.professional-light-profile { display:grid; gap:.8rem; padding:2rem; border:1px solid #e1e5ed; border-radius:1.25rem; background:#fff; box-shadow:0 18px 50px rgba(42,55,86,.09); }
+.professional-light-profile span { width:5rem; height:5rem; font-size:1.3rem; }
+.professional-light-profile strong { color:#172033; }
+.professional-light-profile small { color:#6b778c; }
+.professional-light-content { max-width:1180px; margin:0 auto; padding:0 2rem 4rem; }
+.professional-light-content .portfolio-section { border-top:1px solid #e5e7eb; background:transparent; box-shadow:none; }
+.professional-light-content .cinematic-backdrop,.professional-light-content .section-scene,.professional-light-content .section-cinema { display:none; }
+.professional-light-footer { display:flex; justify-content:space-between; max-width:1180px; margin:0 auto; padding:2rem; border-top:1px solid #e5e7eb; color:#6b778c; }
+@media (max-width:700px) { .professional-light-nav,.professional-light-hero,.professional-light-footer { padding-left:1.1rem; padding-right:1.1rem; } .professional-light-nav { align-items:flex-start; flex-direction:column; } .professional-light-hero { grid-template-columns:1fr; padding-top:4rem; } .professional-light-hero h1 { font-size:clamp(3rem,16vw,5rem); } .professional-light-footer { flex-direction:column; gap:.5rem; } }
