@@ -28,7 +28,7 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
 
   if (panel === "content") return (
     <div className="control-stack">
-      <Select label="Editing" value={contentSection} options={["hero", "about", "experience", "education", "skills", "projects", "opportunity", "site pages", "blog posts", "contact", "page structure", "media library"]} onChange={selectContentSection} />
+      <Select label="Editing" value={contentSection} options={["hero", "about", "experience", "education", "skills", "projects", "opportunity", "opportunity source review", "opportunity shares", "site pages", "blog posts", "contact", "page structure", "media library"]} onChange={selectContentSection} />
       {contentSection === "hero" && <>
         <BufferedField label="Name" value={document.identity.name} maxLength={60} onCommit={(value) => execute({ type: "identity.set", field: "name", value })} />
         <BufferedField label="Professional role" value={document.identity.role} maxLength={80} onCommit={(value) => execute({ type: "identity.set", field: "role", value })} />
@@ -82,6 +82,8 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
         <ProjectGallery project={item} document={document} execute={execute} />
       </article>)}</section>}
       {contentSection === "opportunity" && <><OpportunityEditor document={document} execute={execute} />{canUploadMedia && <><ProfessionalMemory document={document} /><AgentHealth projectId={document.projectId} /></>}{document.opportunity.status !== "canonical" && <><OpportunitySourceReview document={document} /><OpportunityPlanner document={document} execute={execute} enabled={canUploadMedia} />{canUploadMedia && <OpportunityShare document={document} publishedDocument={publishedDocument} />}</>}</>}
+      {contentSection === "opportunity shares" && canUploadMedia && <OpportunityShare document={document} publishedDocument={publishedDocument} />}
+      {contentSection === "opportunity source review" && canUploadMedia && document.opportunity.status !== "canonical" && <OpportunitySourceReview document={document} />}
       {contentSection === "media library" && <MediaLibrary document={document} execute={execute} enabled={canUploadMedia} />}
       {contentSection === "site pages" && <PublishingEditor key="site-pages" document={document} publishedDocument={publishedDocument} execute={execute} kind="page" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "site pages", itemId })} onPublishItem={onPublishItem} publishingItemId={publishingItemId} publishError={itemPublishError} canDirectPublish={canDirectPublish} />}
       {contentSection === "blog posts" && <PublishingEditor key="blog-posts" document={document} publishedDocument={publishedDocument} execute={execute} kind="post" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId === "__index__" ? undefined : previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "blog posts", itemId })} onPreviewListing={() => onPreviewTarget?.({ section: "blog posts", itemId: "__index__" })} onPublishItem={onPublishItem} publishingItemId={publishingItemId} publishError={itemPublishError} canDirectPublish={canDirectPublish} />}
@@ -101,7 +103,7 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
     <div className="control-stack">
       <section className="studio-template-picker" aria-labelledby="template-picker-title"><header><strong id="template-picker-title">Portfolio template</strong><small>Switch presentation without replacing any content.</small></header><div>{TEMPLATE_CONTRACTS.map((template) => <button type="button" key={template.id} className={document.design.template === template.id ? "selected" : ""} aria-pressed={document.design.template === template.id} onClick={() => execute({ type: "design.setTemplate", value: template.id })}><i aria-hidden="true" /><span><strong>{template.name}</strong><small>{template.description}</small></span></button>)}</div></section>
       <Select label="Accent" value={document.design.accent} options={["cyan", "violet", "coral", "lime"]} onChange={(value) => execute({ type: "design.setAccent", value: value as never })} />
-      <Select label="Background" value={document.design.background} options={["midnight", "ink", "plum", "cloud"]} onChange={(value) => execute({ type: "design.setBackground", value: value as never })} />
+      <Select label="Background" value={document.design.background} options={["midnight", "ink", "plum", "cloud", "ivory"]} onChange={(value) => execute({ type: "design.setBackground", value: value as never })} />
       <Select label="Hero alignment" value={document.design.heroAlignment} options={["left", "center", "right"]} onChange={(value) => execute({ type: "design.setHeroAlignment", value: value as never })} />
       <p className="guardrail-note">Only approved design tokens are exposed, so contrast, spacing and hierarchy remain stable.</p>
     </div>
@@ -109,7 +111,7 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
 
   return (
     <div className="control-stack">
-      <Select label="Scene family" value={document.scene.family} options={["orbital-showcase", "constellation-field", "kinetic-gallery", "velocity-roadster"]} onChange={(value) => execute({ type: "scene.setFamily", value: value as never })} />
+      <Select label="Scene family" value={document.scene.family} options={["orbital-showcase", "constellation-field", "kinetic-gallery", "velocity-roadster", "professional-2d"]} onChange={(value) => execute({ type: "scene.setFamily", value: value as never })} />
       <Select label="Scene preset" value={document.scene.preset} options={["cosmic", "architect", "minimal"]} onChange={(value) => execute({ type: "scene.setPreset", value: value as never })} />
       <Select label="Motion" value={document.scene.motion} options={["calm", "dynamic", "still"]} onChange={(value) => execute({ type: "scene.setMotion", value: value as never })} />
       <Field label={`Visual intensity · ${Math.round(document.scene.intensity * 100)}%`}><input type="range" min="0.4" max="1.4" step="0.1" value={document.scene.intensity} onChange={(event) => execute({ type: "scene.setIntensity", value: Number(event.target.value) })} /></Field>

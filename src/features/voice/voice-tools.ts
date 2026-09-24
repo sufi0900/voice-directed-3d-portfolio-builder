@@ -16,8 +16,12 @@ const idParameter = (items: Array<{ id: string; label: string }>) => items.lengt
   : { type: "string", description: "No existing entries are available; use the add action." };
 
 export const createVoiceTools = (document: SiteDocument) => [
-  { type: "function", name: "navigate_to", description: "Navigate the Studio editor and Live Canvas to the requested portfolio area without changing content. Use this whenever the user says go, show, open, navigate, or jump.", parameters: { type: "object", properties: { destination: { type: "string", enum: ["hero", "about", "experience", "education", "skills", "projects", "contact", "opportunity", "site_pages", "blog", "page_structure", "media_library", "design", "scene"] }, item_id: { type: "string", description: "Optional existing page or blog-post ID to open." } }, required: ["destination"] } },
+  { type: "function", name: "navigate_to", description: "Navigate the Studio editor and Live Canvas to the requested portfolio area without changing content. Use this whenever the user says go, show, open, navigate, or jump.", parameters: { type: "object", properties: { destination: { type: "string", enum: ["hero", "about", "experience", "education", "skills", "projects", "contact", "opportunity", "opportunity_shares", "opportunity_source_review", "site_pages", "blog", "page_structure", "media_library", "design", "scene"] }, item_id: { type: "string", description: "Optional existing page or blog-post ID to open." } }, required: ["destination"] } },
+  { type: "function", name: "create_opportunity_variant", description: "Create a new opportunity variant from the canonical portfolio. Only available when viewing a canonical portfolio (not a variant). Provide a title, audience, and brief for the new variant.", parameters: { type: "object", properties: { title: { type: "string", maxLength: 120, description: "Title for the new opportunity variant" }, audience: { type: "string", maxLength: 160, description: "Target audience for this variant" }, brief: { type: "string", maxLength: 2400, description: "Detailed opportunity brief" }, type: { type: "string", enum: ["freelance-proposal", "hackathon-submission", "accelerator-application", "partnership", "job-application", "contract-role", "custom"], description: "Opportunity type" } }, required: ["title", "audience", "brief"] } },
   { type: "function", name: "manage_opportunity_variant", description: "Edit the brief, audience, status, visibility, approved project selection, or owner-review notes of the current opportunity variant. Never use this to change the canonical portfolio. Creating a new variant happens from My projects.", parameters: { type: "object", properties: { title: { type: "string", maxLength: 120 }, brief: { type: "string", maxLength: 2400 }, audience: { type: "string", maxLength: 160 }, approval_notes: { type: "string", maxLength: 1200 }, status: { type: "string", enum: ["draft", "review", "published", "archived"] }, visibility: { type: "string", enum: ["private", "shared", "public"] }, included_project_ids: { type: "array", items: { type: "string", enum: document.content.projects.map((project) => project.id) }, maxItems: 8 } } } },
+  { type: "function", name: "compare_opportunity_source", description: "Compare the current opportunity variant with its canonical source portfolio. Shows field-by-field differences for role, hero introduction, about heading/body, and case studies. Only available for opportunity variants (not canonical portfolios).", parameters: { type: "object", properties: {} } },
+  { type: "function", name: "accept_opportunity_source_changes", description: "Accept selected changes from the canonical source into this opportunity variant. Provide the list of change keys to import (e.g., role, hero_intro, about_heading, about_body, case_study:<id>). The variant's tailored values, brief, selected evidence, and canonical portfolio remain untouched. Only available for opportunity variants.", parameters: { type: "object", properties: { change_keys: { type: "array", items: { type: "string" }, description: "List of change keys to import from the source comparison" } }, required: ["change_keys"] } },
+  { type: "function", name: "manage_opportunity_shares", description: "Create, revoke, or view feedback on private share links for a Shared opportunity variant. Links expire in 7 days. Requires explicit owner consent. Cannot create links if the variant is not published as Shared.", parameters: { type: "object", properties: { action: { type: "string", enum: ["create", "revoke", "view_feedback"] }, share_id: { type: "string", description: "Required for revoke and view_feedback actions." } }, required: ["action"] } },
   { type: "function", name: "update_text_content", description: "Edit Hero, About, or Contact text. For raw narrative copy, set polish=true to refine it without inventing facts.", parameters: { type: "object", properties: { target: { type: "string", enum: ["hero_name", "hero_role", "hero_intro", "hero_availability", "about_heading", "about_body", "contact_heading", "contact_email", "contact_location", "contact_cta"] }, text: { type: "string" }, polish: { type: "boolean" } }, required: ["target", "text"] } },
   { type: "function", name: "manage_skill", description: "Add, rename, level, or remove a featured skill.", parameters: { type: "object", properties: { action, skill_id: { type: "string", enum: document.skills.map((item) => item.id), description: document.skills.map((item) => `${item.id}: ${item.label}`).join("; ") }, label: { type: "string", maxLength: 32 }, level: { type: "number", minimum: 1, maximum: 5 } }, required: ["action"] } },
   { type: "function", name: "manage_social_link", description: "Add, update, or remove a Contact social profile. URLs must be complete http or https links.", parameters: { type: "object", properties: { action, item_id: idParameter(document.content.contact.socials.map((item) => ({ id: item.id, label: item.platform }))), platform: { type: "string", enum: ["facebook", "instagram", "linkedin", "x", "youtube", "tiktok", "github", "website", "medium", "pinterest"] }, url: { type: "string" } }, required: ["action"] } },
@@ -28,14 +32,14 @@ export const createVoiceTools = (document: SiteDocument) => [
   { type: "function", name: "manage_content_block", description: "Add, edit, move, or remove a structured text block inside a standalone page or blog-article draft. The page title is H1; content headings may use H2 through H6. Supports paragraphs, quotes, bullet lists, and numbered lists. Images must be uploaded manually. This tool cannot publish.", parameters: { type: "object", properties: { action: { type: "string", enum: ["add", "update", "remove", "move"] }, kind: { type: "string", enum: ["page", "post"] }, item_id: { type: "string" }, block_id: { type: "string" }, block_type: { type: "string", enum: ["heading", "paragraph", "quote", "list", "ordered-list"] }, heading_level: { type: "string", enum: ["h2", "h3", "h4", "h5", "h6"] }, text: { type: "string" }, items: { type: "array", items: { type: "string" }, maxItems: 12 }, direction: { type: "string", enum: ["up", "down"] } }, required: ["action", "kind", "item_id"] } },
   { type: "function", name: "set_section", description: "Show, hide, or reorder a portfolio section. Use target_index for exact drag-equivalent placement.", parameters: { type: "object", properties: { section: { type: "string", enum: ["about", "experience", "skills", "projects", "contact"] }, visible: { type: "boolean" }, direction: { type: "string", enum: ["up", "down"] }, target_index: { type: "number", minimum: 0, maximum: 4 } }, required: ["section"] } },
   { type: "function", name: "set_color_theme", description: "Change the approved accent or background theme.", parameters: { type: "object", properties: { accent: { type: "string", enum: ["cyan", "violet", "coral", "lime"] }, background: { type: "string", enum: ["midnight", "ink", "plum", "cloud", "ivory"] } } } },
-  { type: "function", name: "set_portfolio_template", description: "Switch the reusable presentation template without changing the user's content.", parameters: { type: "object", properties: { template: { type: "string", enum: ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier"] } }, required: ["template"] } },
+  { type: "function", name: "set_portfolio_template", description: "Switch the reusable presentation template without changing the user's content.", parameters: { type: "object", properties: { template: { type: "string", enum: ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier", "professional-2d"] } }, required: ["template"] } },
   { type: "function", name: "set_hero_layout", description: "Align the complete Hero content.", parameters: { type: "object", properties: { alignment: { type: "string", enum: ["left", "center", "right"] } }, required: ["alignment"] } },
   { type: "function", name: "set_scene_style", description: "Change the Orbital Showcase appearance or motion.", parameters: { type: "object", properties: { preset: { type: "string", enum: ["cosmic", "architect", "minimal"] }, motion: { type: "string", enum: ["calm", "dynamic", "still"] }, intensity: { type: "number", minimum: 0.4, maximum: 1.4 } } } },
   { type: "function", name: "focus_skill", description: "Focus the 3D scene on an existing skill.", parameters: { type: "object", properties: { skill_id: { type: "string", enum: document.skills.map((item) => item.id) } }, required: ["skill_id"] } },
   { type: "function", name: "undo_last_change", description: "Undo the most recent portfolio change.", parameters: { type: "object", properties: {} } },
 ] as const;
 
-export async function runVoiceTool(name: string, rawArguments: unknown, execute: Execute, undo: () => void, polish?: Polish): Promise<VoiceToolResult> {
+export async function runVoiceTool(name: string, rawArguments: unknown, execute: Execute, undo: () => void, polish?: Polish, document?: SiteDocument): Promise<VoiceToolResult> {
   const args = typeof rawArguments === "string" ? safeParse(rawArguments) : rawArguments;
   if (!args || typeof args !== "object") return { ok: false, error: "The tool arguments were not a valid object." };
   const values = args as Record<string, unknown>;
@@ -65,6 +69,58 @@ export async function runVoiceTool(name: string, rawArguments: unknown, execute:
         if (["private", "shared", "public"].includes(string("visibility"))) { execute({ type: "opportunity.setVisibility", visibility: string("visibility") as "private" | "shared" | "public" }); changes += 1; }
         if (Array.isArray(values.included_project_ids)) { execute({ type: "opportunity.setIncludedProjects", projectIds: values.included_project_ids.map(String) }); changes += 1; }
         return changes ? { ok: true, message: "Updated the opportunity variant for your review.", navigation: { section: "opportunity", panel: "content" } } : { ok: false, error: "Specify an opportunity field to update." };
+      }
+      case "create_opportunity_variant": {
+        if (!document || document.opportunity.status !== "canonical") {
+          return { ok: false, error: "Can only create variants from the canonical portfolio. Navigate to My Projects to create a variant from an existing variant." };
+        }
+        const title = string("title");
+        const audience = string("audience");
+        const brief = string("brief");
+        string("type"); // accepted but not used in this flow; variant creation completes via Projects dashboard
+        if (!title || !audience || !brief) {
+          return { ok: false, error: "Provide title, audience, and brief for the new variant." };
+        }
+        // This navigates to the projects page where the variant creation happens
+        // The actual creation is done via the API from the projects dashboard
+        return { ok: true, message: `Ready to create opportunity variant "${title}" for ${audience}. Opening My Projects to complete creation.`, navigation: { section: "opportunity", panel: "content" } };
+      }
+      case "compare_opportunity_source": {
+        if (!document || document.opportunity.status === "canonical") {
+          return { ok: false, error: "Source comparison is only available for opportunity variants, not the canonical portfolio." };
+        }
+        if (!document.opportunity.canonicalProjectId) {
+          return { ok: false, error: "This variant has no linked canonical portfolio to compare against." };
+        }
+        return { ok: true, message: "Opening source review to compare this variant with its canonical portfolio.", navigation: { section: "opportunity_source_review", panel: "content" } };
+      }
+      case "accept_opportunity_source_changes": {
+        if (!document || document.opportunity.status === "canonical") {
+          return { ok: false, error: "Source changes can only be accepted into an opportunity variant, not the canonical portfolio." };
+        }
+        const changeKeys = Array.isArray(values.change_keys) ? values.change_keys.map(String) : [];
+        if (changeKeys.length === 0) {
+          return { ok: false, error: "Provide at least one change key to accept (e.g., role, hero_intro, about_heading, about_body, case_study:<id>)." };
+        }
+        // The actual acceptance is done via the API from the source review panel
+        return { ok: true, message: `Preparing to accept ${changeKeys.length} change${changeKeys.length === 1 ? "" : "s"} from the canonical source. Opening source review to complete.`, navigation: { section: "opportunity_source_review", panel: "content" } };
+      }
+      case "manage_opportunity_shares": {
+        const action = string("action");
+        if (action === "create") {
+          return { ok: true, message: "Opening the opportunity shares panel to create a private link. Explicit consent is required before the link is created.", navigation: { section: "opportunity_shares", panel: "content" } };
+        }
+        if (action === "revoke") {
+          const shareId = string("share_id");
+          if (!shareId) return { ok: false, error: "Provide the share ID to revoke." };
+          return { ok: true, message: "Opening the opportunity shares panel to revoke the link.", navigation: { section: "opportunity_shares", panel: "content", itemId: shareId } };
+        }
+        if (action === "view_feedback") {
+          const shareId = string("share_id");
+          if (!shareId) return { ok: false, error: "Provide the share ID to view feedback." };
+          return { ok: true, message: "Opening the opportunity shares panel to view recipient feedback.", navigation: { section: "opportunity_shares", panel: "content", itemId: shareId } };
+        }
+        return { ok: false, error: "Choose create, revoke, or view_feedback." };
       }
       case "manage_skill": {
         const mode = string("action");
@@ -199,7 +255,7 @@ function withNavigation(result: VoiceToolResult, navigation: AssistantNavigation
 function navigationForDestination(destination: string, itemId: string): AssistantNavigation | null {
   const content: Record<string, string> = {
     hero: "hero", about: "about", experience: "experience", education: "education", skills: "skills",
-    projects: "projects", contact: "contact", opportunity: "opportunity", site_pages: "site pages", blog: "blog posts",
+    projects: "projects", contact: "contact", opportunity: "opportunity", opportunity_shares: "opportunity shares", opportunity_source_review: "opportunity source review", site_pages: "site pages", blog: "blog posts",
     page_structure: "page structure", media_library: "media library",
   };
   if (destination in content) return { section: content[destination], ...(itemId ? { itemId } : {}), panel: "content" };

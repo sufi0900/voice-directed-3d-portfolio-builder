@@ -1,6 +1,6 @@
 import type { SiteDocument } from "./site-document";
 
-export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier"] as const;
+export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier", "professional-2d"] as const;
 export type TemplateId = typeof templateOptions[number];
 
 export type TemplateContract = {
@@ -54,6 +54,13 @@ export const TEMPLATE_CONTRACTS: readonly TemplateContract[] = [
     description: "A night-showroom automotive stage with a sculpted GT coupe, cruising light streaks and cinematic 3D sections.",
     audience: "Product designers, technologists and ambitious independent creators",
     presentation: { accent: "coral", background: "ink", heroAlignment: "left", sceneFamily: "velocity-roadster", scenePreset: "minimal", motion: "dynamic", intensity: 1.05 },
+  },
+  {
+    id: "professional-2d",
+    name: "Professional 2D",
+    description: "A clean, accessible light-mode layout with no 3D scene — pure typography and whitespace.",
+    audience: "Corporate professionals, academics, and minimalists",
+    presentation: { accent: "violet", background: "ivory", heroAlignment: "center", sceneFamily: "professional-2d", scenePreset: "minimal", motion: "still", intensity: 0.4 },
   },
 ] as const;
 

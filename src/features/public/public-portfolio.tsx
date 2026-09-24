@@ -4,9 +4,16 @@ import { useEffect, useState } from "react";
 import type { SiteDocument } from "@/domain/site-document";
 import { PortfolioNavigation, PortfolioSections } from "@/features/portfolio/portfolio-sections";
 import { SceneRenderer } from "@/features/scene/scene-renderer";
+import { ShareFeedbackWidget } from "./share-feedback-widget";
 const backgroundClass = { midnight: "bg-midnight", ink: "bg-ink", plum: "bg-plum", cloud: "bg-cloud", ivory: "bg-ivory" } as const;
 
-export function PublicPortfolio({ document, slug, basePath }: { document: SiteDocument; slug: string; basePath?: string }) {
+export function PublicPortfolio({
+  document,
+  slug,
+  basePath,
+  shareToken,
+  isShared,
+}: { document: SiteDocument; slug: string; basePath?: string; shareToken?: string; isShared?: boolean }) {
   const path = basePath ?? `/p/${slug}`;
   const [reducedMotion, setReducedMotion] = useState(false);
   useEffect(() => {
@@ -16,8 +23,9 @@ export function PublicPortfolio({ document, slug, basePath }: { document: SiteDo
     return () => preference.removeEventListener("change", sync);
   }, []);
   const focusedSkill = document.skills.find((skill) => skill.id === document.scene.focusedSkill);
+  const isLightTheme = document.design.template === "professional-2d";
   const initials = document.identity.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "VF";
-  return <main className={`studio public-site template-${document.design.template} ${backgroundClass[document.design.background]}`} data-accent={document.design.accent}>
+  return <main className={`studio public-site template-${document.design.template} ${backgroundClass[document.design.background]} ${isLightTheme ? "light-theme" : ""}`} data-accent={document.design.accent}>
     <header className="public-nav"><a className="public-identity" href="#"><i>{initials}</i><strong>{document.identity.name}</strong></a><PortfolioNavigation document={document} publicBasePath={path} />{document.content.contact.email ? <a className="public-contact-link" href="#contact">Contact</a> : <span />}</header>
     <div className="portfolio-preview" aria-label={`${document.identity.name}'s portfolio`}>
       <section className={`portfolio-hero align-${document.design.heroAlignment}`}>
@@ -36,5 +44,6 @@ export function PublicPortfolio({ document, slug, basePath }: { document: SiteDo
       <PortfolioSections document={document} publicBasePath={path} />
     </div>
     <footer className="public-footer"><span>Built with Voxfolio</span><small>Published revision {document.revision}</small></footer>
+    {isShared && shareToken && <ShareFeedbackWidget shareToken={shareToken} />}
   </main>;
 }

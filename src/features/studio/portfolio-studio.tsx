@@ -161,8 +161,10 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     setPublication(undefined); setPublishedDocument(undefined); setPublishOpen(false);
   }
 
+  const isLightTheme = state.present.design.template === "professional-2d";
+
   return (
-    <main className={`studio template-${state.present.design.template} ${backgroundClass[state.present.design.background]} ${previewOnly ? "preview-only" : ""} ${editorExpanded ? "editor-expanded" : ""}`} data-accent={state.present.design.accent}>
+    <main className={`studio template-${state.present.design.template} ${backgroundClass[state.present.design.background]} ${previewOnly ? "preview-only" : ""} ${editorExpanded ? "editor-expanded" : ""} ${isLightTheme ? "light-theme" : ""}`} data-accent={state.present.design.accent}>
       <header className="topbar">
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>VOXFOLIO</strong><small>{projectName}</small></div></div>
         <div className="project-state"><span className={saved ? "saved" : "saving"}><Save size={14} />{saveError || (saved ? persistence === "server" ? "Saved to cloud" : "Saved locally" : "Saving…")}</span><i />Revision {state.present.revision}</div>

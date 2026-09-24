@@ -216,7 +216,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
       const epoch = voiceEpochRef.current;
       voiceQueueRef.current = voiceQueueRef.current.then(async () => {
         if (epoch !== voiceEpochRef.current) return;
-        const result = await runVoiceTool(name, event.arguments, executeSafely, undoRef.current, polish);
+        const result = await runVoiceTool(name, event.arguments, executeSafely, undoRef.current, polish, documentRef.current);
         if (epoch !== voiceEpochRef.current) return;
         pendingToolsRef.current.push({ callId, result: applyResult(result) });
         flushTools();
@@ -357,7 +357,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
         payload = await response.json() as AssistantPlan & { error?: string };
         if (!response.ok) throw new Error(payload.error || "The assistant could not process that request.");
       }
-      const outcome = await executeAssistantSteps(payload.calls ?? [], async (call) => applyResult(await runVoiceTool(call.name, call.arguments, executeSafely, undoRef.current, polish)));
+      const outcome = await executeAssistantSteps(payload.calls ?? [], async (call) => applyResult(await runVoiceTool(call.name, call.arguments, executeSafely, undoRef.current, polish, documentRef.current)));
       await revealTranscript(pendingReplyId, outcome.error
         ? `${outcome.completed.length} step${outcome.completed.length === 1 ? "" : "s"} completed. I stopped at the next step: ${outcome.error}`
         : payload.reply ?? "Done.");

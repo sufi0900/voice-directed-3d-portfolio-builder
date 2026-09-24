@@ -21,7 +21,7 @@ const base = (overrides: Partial<SiteDocument>): SiteDocument => ({
 });
 
 export const PORTFOLIO_TEMPLATES: PortfolioTemplate[] = [
-  ...TEMPLATE_CONTRACTS.map((template) => ({ id: template.id, name: template.name, description: template.description, mode: "3d" as const, audience: template.audience, document: base({ design: { template: template.id, accent: template.presentation.accent, background: template.presentation.background, heroAlignment: template.presentation.heroAlignment }, scene: { family: template.presentation.sceneFamily, preset: template.presentation.scenePreset, motion: template.presentation.motion, intensity: template.presentation.intensity, focusedSkill: null } }) })),
+  ...TEMPLATE_CONTRACTS.map((template) => ({ id: template.id, name: template.name, description: template.description, mode: template.id === "professional-2d" ? "2d" as const : "3d" as const, audience: template.audience, document: base({ design: { template: template.id, accent: template.presentation.accent, background: template.presentation.background, heroAlignment: template.presentation.heroAlignment }, scene: { family: template.presentation.sceneFamily, preset: template.presentation.scenePreset, motion: template.presentation.motion, intensity: template.presentation.intensity, focusedSkill: null } }) })),
 ];
 
 export function getTemplate(id: string) {

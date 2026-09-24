@@ -34,7 +34,8 @@ export default async function SharedOpportunityPage({ params }: Props) {
   const document = await sharedDocument(token);
   if (!document) notFound();
   const basePath = `/s/${token}`;
-  if (!path.length) return <PublicPortfolio document={document} slug="" basePath={basePath} />;
+  const sharedProps = { shareToken: token, isShared: true as const };
+  if (!path.length) return <PublicPortfolio document={document} slug="" basePath={basePath} {...sharedProps} />;
   if (path[0] === "projects") {
     if (path.length === 1) return <PublicProjectsIndex document={document} portfolioSlug="" basePath={basePath} />;
     const project = projectsForPresentation(document).find((item) => item.caseStudySlug === path[1]);

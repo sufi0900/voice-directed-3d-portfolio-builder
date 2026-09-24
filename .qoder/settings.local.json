@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"C:\\\\Users\\\\sufia\\\\Downloads\\\\Ai Assembly\\\\voice-directed-3d-portfolio-builder\\\\src\\\\domain\" 2>/dev/null | head -50)",
+      "Bash(wc:*)",
+      "Bash(head -40 \"C:\\\\Users\\\\sufia\\\\Downloads\\\\Ai Assembly\\\\voice-directed-3d-portfolio-builder\\\\src\\\\app\\\\p\\\\[slug]\\\\opengraph-image.tsx\"; echo ---; wc -l \"C:\\\\Users\\\\sufia\\\\Downloads\\\\Ai Assembly\\\\voice-directed-3d-portfolio-builder\\\\src\\\\features\\\\portfolio\\\\section-cinema.css\" \"C:\\\\Users\\\\sufia\\\\Downloads\\\\Ai Assembly\\\\voice-directed-3d-portfolio-builder\\\\src\\\\features\\\\portfolio\\\\section-cinema-velocity.css\" 2>/dev/null)",
+      "Bash(cd \"C:\\\\Users\\\\sufia\\\\Downloads\\\\Ai Assembly\\\\voice-directed-3d-portfolio-builder\" && pnpm typecheck 2>&1 | tail -20 && echo \"=== TYPECHECK DONE ===\" && pnpm test 2>&1 | tail -30)"
+    ]
+  }
+}
