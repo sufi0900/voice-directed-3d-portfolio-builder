@@ -16,19 +16,30 @@ import { ProfessionalMemory } from "./professional-memory";
 import { AgentHealth } from "./agent-health";
 
 export type PreviewTarget = { section: string; itemId?: string };
-type Props = { document: SiteDocument; publishedDocument?: SiteDocument; execute: (command: SiteCommand) => void; panel: "content" | "design" | "scene"; canUploadMedia?: boolean; previewTarget?: PreviewTarget; onPreviewTarget?: (target: PreviewTarget) => void; onPublishItem?: (kind: "page" | "post", itemId: string, status: "draft" | "published") => void; publishingItemId?: string; itemPublishError?: string; canDirectPublish?: boolean };
+type Props = { document: SiteDocument; publishedDocument?: SiteDocument; execute: (command: SiteCommand) => void; panel: "content" | "design" | "scene" | "opportunity"; canUploadMedia?: boolean; previewTarget?: PreviewTarget; onPreviewTarget?: (target: PreviewTarget) => void; onPublishItem?: (kind: "page" | "post", itemId: string, status: "draft" | "published") => void; publishingItemId?: string; itemPublishError?: string; canDirectPublish?: boolean };
 
 export function ManualControls({ document, publishedDocument, execute, panel, canUploadMedia = false, previewTarget, onPreviewTarget, onPublishItem, publishingItemId = "", itemPublishError = "", canDirectPublish = false }: Props) {
   const [newSkill, setNewSkill] = useState("");
+  const contentDestinations = ["hero", "about", "experience", "education", "skills", "projects", "site pages", "blog posts", "contact", "page structure", "media library"];
   const contentSection = previewTarget?.section ?? "hero";
   const selectContentSection = (section: string) => {
     const itemId = section === "site pages" ? document.publishing.pages[0]?.id : section === "blog posts" ? document.publishing.posts[0]?.id : undefined;
     onPreviewTarget?.({ section, itemId });
   };
 
+  if (panel === "opportunity") return (
+    <div className="control-stack opportunity-workspace">
+      <nav className="studio-section-nav opportunity-nav" aria-label="Opportunity workspace"><a href="#opportunity-details">Details</a>{document.opportunity.status !== "canonical" && <><a href="#opportunity-source">Source review</a><a href="#opportunity-planning">Suggestions</a>{canUploadMedia && <a href="#opportunity-sharing">Sharing</a>}</>}</nav>
+      <div className="opportunity-workspace-block" id="opportunity-details"><OpportunityEditor document={document} execute={execute} /></div>
+      {canUploadMedia && <><ProfessionalMemory document={document} /><AgentHealth projectId={document.projectId} /></>}
+      {document.opportunity.status !== "canonical" && <><div className="opportunity-workspace-block" id="opportunity-source"><OpportunitySourceReview document={document} /></div><div className="opportunity-workspace-block" id="opportunity-planning"><OpportunityPlanner document={document} execute={execute} enabled={canUploadMedia} /></div>{canUploadMedia && <div className="opportunity-workspace-block" id="opportunity-sharing"><OpportunityShare document={document} publishedDocument={publishedDocument} /></div>}</>}
+    </div>
+  );
+
   if (panel === "content") return (
     <div className="control-stack">
-      <Select label="Editing" value={contentSection} options={["hero", "about", "experience", "education", "skills", "projects", "opportunity", "opportunity source review", "opportunity shares", "site pages", "blog posts", "contact", "page structure", "media library"]} onChange={selectContentSection} />
+      <nav className="studio-section-nav" aria-label="Edit portfolio content">{contentDestinations.map((destination) => <button type="button" key={destination} className={contentSection === destination ? "active" : ""} aria-current={contentSection === destination ? "page" : undefined} onClick={() => selectContentSection(destination)}>{destination}</button>)}</nav>
+      <Select label="Editing" value={contentSection} options={contentDestinations} onChange={selectContentSection} />
       {contentSection === "hero" && <>
         <BufferedField label="Name" value={document.identity.name} maxLength={60} onCommit={(value) => execute({ type: "identity.set", field: "name", value })} />
         <BufferedField label="Professional role" value={document.identity.role} maxLength={80} onCommit={(value) => execute({ type: "identity.set", field: "role", value })} />
@@ -55,7 +66,7 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
           {document.skills.map((skill) => <div className="skill-row" key={skill.id}>
             <BufferedInput ariaLabel={`Edit ${skill.label}`} value={skill.label} maxLength={32} onCommit={(label) => execute({ type: "skill.update", skillId: skill.id, label })} />
             <label className="skill-level"><span>Level</span><select aria-label={`${skill.label} level`} value={skill.level} onChange={(event) => execute({ type: "skill.update", skillId: skill.id, level: Number(event.target.value) })}>{[1, 2, 3, 4, 5].map((level) => <option key={level}>{level}</option>)}</select></label>
-            <button type="button" className="icon-action danger" aria-label={`Remove ${skill.label}`} disabled={document.skills.length <= 3} onClick={() => execute({ type: "skill.remove", skillId: skill.id })}><Trash2 size={15} /></button>
+            <button type="button" className="icon-action danger" aria-label={`Remove ${skill.label}`} onClick={() => execute({ type: "skill.remove", skillId: skill.id })}><Trash2 size={15} /></button>
           </div>)}
         </div>
         <div className="skill-add"><input aria-label="New skill" placeholder="Add another skill" value={newSkill} maxLength={32} onChange={(event) => setNewSkill(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && newSkill.trim()) { event.preventDefault(); execute({ type: "skill.add", label: newSkill }); setNewSkill(""); } }} /><button type="button" disabled={!newSkill.trim() || document.skills.length >= 8} onClick={() => { execute({ type: "skill.add", label: newSkill }); setNewSkill(""); }}><Plus size={15} />Add</button></div>
@@ -81,9 +92,6 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
         <BufferedField label="Project URL" value={item.link} maxLength={300} allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "link", value })} />
         <ProjectGallery project={item} document={document} execute={execute} />
       </article>)}</section>}
-      {contentSection === "opportunity" && <><OpportunityEditor document={document} execute={execute} />{canUploadMedia && <><ProfessionalMemory document={document} /><AgentHealth projectId={document.projectId} /></>}{document.opportunity.status !== "canonical" && <><OpportunitySourceReview document={document} /><OpportunityPlanner document={document} execute={execute} enabled={canUploadMedia} />{canUploadMedia && <OpportunityShare document={document} publishedDocument={publishedDocument} />}</>}</>}
-      {contentSection === "opportunity shares" && canUploadMedia && <OpportunityShare document={document} publishedDocument={publishedDocument} />}
-      {contentSection === "opportunity source review" && canUploadMedia && document.opportunity.status !== "canonical" && <OpportunitySourceReview document={document} />}
       {contentSection === "media library" && <MediaLibrary document={document} execute={execute} enabled={canUploadMedia} />}
       {contentSection === "site pages" && <PublishingEditor key="site-pages" document={document} publishedDocument={publishedDocument} execute={execute} kind="page" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "site pages", itemId })} onPublishItem={onPublishItem} publishingItemId={publishingItemId} publishError={itemPublishError} canDirectPublish={canDirectPublish} />}
       {contentSection === "blog posts" && <PublishingEditor key="blog-posts" document={document} publishedDocument={publishedDocument} execute={execute} kind="post" canUploadMedia={canUploadMedia} selectedItemId={previewTarget?.itemId === "__index__" ? undefined : previewTarget?.itemId} onSelect={(itemId) => onPreviewTarget?.({ section: "blog posts", itemId })} onPreviewListing={() => onPreviewTarget?.({ section: "blog posts", itemId: "__index__" })} onPublishItem={onPublishItem} publishingItemId={publishingItemId} publishError={itemPublishError} canDirectPublish={canDirectPublish} />}

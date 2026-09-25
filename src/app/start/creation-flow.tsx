@@ -6,10 +6,11 @@ import { PORTFOLIO_TEMPLATES } from "@/domain/templates";
 import type { CvCandidate } from "@/domain/cv-ingestion";
 import type { GuidedInterview } from "@/domain/guided-interview";
 import { GuidedInterviewPanel } from "./guided-interview";
+import { VoxGuidedInterview } from "./vox-guided-interview";
 
 type Mode = "guided" | "template";
 
-export function CreationFlow({ authenticated }: { authenticated: boolean }) {
+export function CreationFlow({ authenticated, suggestedName = "" }: { authenticated: boolean; suggestedName?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,7 +23,7 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
   const [cvSource, setCvSource] = useState<{ sourceId: string; fileName: string; mediaType: string } | null>(null);
   const [cvCandidates, setCvCandidates] = useState<Array<CvCandidate & { approved: boolean }>>([]);
   const [interview, setInterview] = useState<Partial<GuidedInterview>>({});
-  const [form, setForm] = useState({ projectName: "", name: "", role: "", intro: "", skills: "", education: "" });
+  const [form, setForm] = useState({ projectName: suggestedName ? `${suggestedName} Portfolio`.slice(0,80) : "", name: suggestedName, role: "", intro: "", skills: "", education: "", website: "" });
   const selectedTemplate = PORTFOLIO_TEMPLATES.find((template) => template.id === templateId) ?? PORTFOLIO_TEMPLATES[0];
 
   async function create() {
@@ -34,7 +35,7 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
       originalStored: false as const,
       approvedFacts: cvCandidates.filter((item) => item.approved).map((item) => ({ id: item.id, kind: item.kind, value: item.value, sourceExcerpt: item.sourceExcerpt })),
     } : undefined;
-    const body = mode === "template" ? { mode, templateId, projectName: form.projectName } : { mode: "guided", ...form, skills: form.skills.split(",").map((item) => item.trim()).filter(Boolean), education: form.education.split("\n").map((item) => item.trim()).filter(Boolean), cv, interview };
+    const body = mode === "template" ? { mode, templateId, projectName: form.projectName } : { mode: "guided", templateId, ...form, skills: form.skills.split(",").map((item) => item.trim()).filter(Boolean), education: form.education.split("\n").map((item) => item.trim()).filter(Boolean), cv, interview };
     const response = await fetch("/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const result = await response.json(); setBusy(false);
     if (!response.ok) return setError(result.error ?? "Could not create the project.");
@@ -72,7 +73,7 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
   }
 
   if (!mode) return <section className="choice-grid">
-    <button onClick={() => setMode("guided")}><span>01</span><h2>Guided creation</h2><p>Tell the system who you are and what the portfolio must achieve. We select a governed starting system.</p><b>Start guided setup →</b></button>
+    <button onClick={() => setMode("guided")}><span>01</span><h2>Build with Vox</h2><p>Talk or type your answers to a guided interview, choose a visual foundation, and review the private first draft.</p><b>Start guided setup →</b></button>
     <button onClick={() => setMode("template")}><span>02</span><h2>Choose a template</h2><p>Begin with a curated 3D or professional low-motion foundation, then customize it manually or by voice.</p><b>Browse templates →</b></button>
   </section>;
 
@@ -82,11 +83,18 @@ export function CreationFlow({ authenticated }: { authenticated: boolean }) {
     <h1>{mode === "guided" ? "Build from your goals" : "Choose a governed foundation"}</h1>
     <label>Project name<input value={form.projectName} onChange={(e) => setForm({ ...form, projectName: e.target.value })} maxLength={80} placeholder="e.g. Sufian — Growth Systems Portfolio" /><small className="field-help">Use a distinct name so this portfolio is easy to find later.</small></label>
     {mode === "guided" ? <div className="guided-fields">
+      <VoxGuidedInterview authenticated={authenticated} />
+      <div className="template-selection-layout"><div className="template-grid">{PORTFOLIO_TEMPLATES.map((template) => <button type="button" aria-pressed={template.id === templateId} className={template.id === templateId ? "selected" : ""} key={template.id} onClick={() => setTemplateId(template.id)}><i>{template.mode.toUpperCase()}</i><h3>{template.name}</h3><p>{template.description}</p></button>)}</div><TemplatePreview template={selectedTemplate} /></div>
+      <h2 className="creation-review-heading">Enter and verify your portfolio details</h2>
+      <p className="creation-review-help">Use the conversation for ideas. Type exact names, qualifications and URLs yourself; only this form is saved.</p>
+      <div className="creation-review-fields">
       <label>Your name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
       <label>Professional role<input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} /></label>
       <label>Short positioning statement<textarea value={form.intro} onChange={(e) => setForm({ ...form, intro: e.target.value })} maxLength={220} /></label>
       <label>Core skills <small className="field-help">Optional · separate skills with commas</small><textarea value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} maxLength={300} placeholder="Next.js, Technical SEO, AI Automation" /></label>
       <label>Education <small className="field-help">Optional · add one credential per line</small><textarea value={form.education} onChange={(e) => setForm({ ...form, education: e.target.value })} maxLength={600} placeholder="MCS — Abdul Wali Khan University Mardan" /></label>
+      <label>Website link <small className="field-help">Optional · this will appear in your contact links</small><input type="url" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} maxLength={300} placeholder="https://yourwebsite.com" /></label>
+      </div>
       <section className={`cv-import ${cvBusy ? "is-processing" : ""}`} aria-busy={cvBusy}>
         <div><span className="eyebrow">OPTIONAL CV GROUNDING</span><h2>Import facts, then approve them</h2><p>PDF, DOCX, or TXT · maximum 5 MB. The original file is processed temporarily and is not stored.</p></div>
         <div className="cv-upload-row">

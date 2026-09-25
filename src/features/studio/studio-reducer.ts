@@ -6,7 +6,7 @@ export type StudioState = {
   present: SiteDocument;
   future: SiteDocument[];
   receipts: CommandReceipt[];
-  selectedPanel: "content" | "design" | "scene";
+  selectedPanel: "content" | "design" | "scene" | "opportunity";
   hydrated: boolean;
   lastCommandError: string | null;
 };

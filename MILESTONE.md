@@ -1,3 +1,36 @@
+# V23.2 — Template color consistency
+
+This cumulative release includes V23.1 and restores per-template accent colors in the Studio canvas and published portfolio. Architectural Grid uses violet, Velocity Atelier uses warm coral, and the other templates retain their selected palette. Studio controls and the Voice Assistant keep their dark appearance. The same accents now reach dedicated About, Blog, Projects, and case study pages. No new SQL is required.
+
+Check template switching in the canvas and on public pages, then confirm the surrounding editor does not change color. See `V23_2_RELEASE_NOTES.md` for the acceptance checklist.
+
+---
+
+# V23.1 — Professional 2D presentation and Studio workspace
+
+## Included in this cumulative release
+
+- Builds on the supplied V23 ZIP, retaining the V23 selective source review and its existing migrations. No new SQL is required for this presentation update.
+- Keeps Studio header, editor, Voice Assistant, forms and publish controls dark when changing portfolio template or accent. The 2D theme is scoped to live preview, published portfolio and standalone pages.
+- Replaces the Professional 2D homepage composition: split editorial hero, portrait About, separate experience and education columns, labeled skill tiles (no 3D bars), image-led project cards and a warm contact surface.
+- Gives site pages, blog index, projects index, and case studies the same readable 2D palette.
+- Adds editor content shortcuts and opportunity workflow navigation. Expanding the editor uses the full desktop width and rearranges controls into usable columns, including the Opportunity view.
+- Retains the original 3D layouts, content schema, voice commands, revisions, publication and privacy boundaries.
+
+## Acceptance checks on your machine
+
+1. Switch between Professional 2D and every 3D template in Studio. Confirm only portfolio preview changes; Studio header, controls, assistant, forms and accessibility contrast remain dark.
+2. Open Professional 2D preview and public URL on desktop and mobile. Check all five homepage sections, About detail, Blog, article, Projects and a case study; verify uploaded image crops and social links.
+3. Expand Content → Opportunity (on an opportunity version) and try Details, Source review, Suggestions and Sharing. Check readable desktop widths; restore and verify narrow editor buttons can scroll horizontally.
+4. Verify Content shortcuts update the selected section and canvas, and Preview hides editing controls. Save/publish with a real authenticated account to check persistence and the public snapshot.
+5. Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm check:bundle`.
+
+## Known acceptance limit
+
+The supplied ZIP does not contain a U template or a reference image for one. The new Professional 2D layout follows the user's stated editorial, warm neutral, non-3D direction. An exact match to a particular U template would require its design reference. Authenticated Supabase media and publication require owner testing in the configured deployment.
+
+---
+
 # Milestone 18 — Velocity Atelier automotive presentation
 
 ## V18 completed capability

@@ -5,7 +5,7 @@ import type { SiteDocument } from "@/domain/site-document";
 export function PublicCaseStudy({ document, portfolioSlug, project, basePath }: { document: SiteDocument; portfolioSlug: string; project: SiteDocument["content"]["projects"][number]; basePath?: string }) {
   const path = basePath ?? `/p/${portfolioSlug}`;
   const gallery = project.mediaIds.map((id) => document.media.assets.find((asset) => asset.id === id)).filter((asset): asset is SiteDocument["media"]["assets"][number] => Boolean(asset));
-  return <main className={`case-study-page bg-${document.design.background}`} data-accent={document.design.accent}>
+  return <main className={`case-study-page bg-${document.design.background} template-${document.design.template} ${document.design.template === "professional-2d" ? "light-theme" : ""}`} data-accent={document.design.accent}>
     <header className="case-study-nav"><a href={path}><ArrowLeft size={16} />{document.identity.name}</a>{project.link && <a href={project.link} target="_blank" rel="noreferrer">Visit project <ArrowUpRight size={15} /></a>}</header>
     <article className="case-study-shell">
       <header className="case-study-hero"><p className="section-eyebrow">PROJECT CASE STUDY</p><h1>{project.title}</h1><p>{project.summary}</p><dl>{project.role && <div><dt>Role</dt><dd>{project.role}</dd></div>}{project.period && <div><dt>Period</dt><dd>{project.period}</dd></div>}{project.technologies.length > 0 && <div><dt>Stack</dt><dd>{project.technologies.join(" · ")}</dd></div>}</dl></header>

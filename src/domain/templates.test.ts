@@ -12,6 +12,17 @@ describe("portfolio templates", () => {
     expect(document.identity).toMatchObject({ name: "Amina Khan", role: "Product designer", intro: "I design accessible financial tools." });
     expect(document.projectId).toBe("project-1");
     expect(document.scene.preset).toBe("minimal");
+    expect(document.skills).toHaveLength(0);
+    expect(document.content.projects).toHaveLength(0);
+    expect(document.content.experience).toHaveLength(0);
+  });
+
+  it("applies an explicitly chosen template while preserving owner facts", () => {
+    const document = buildGuidedDocument({ name: "Amina Khan", role: "Researcher", intro: "I study interfaces.", skills: ["Research"], style: "technical", templateId: "professional-2d" });
+    expect(document.design.template).toBe("professional-2d");
+    expect(document.design.background).toBe("ivory");
+    expect(document.skills.map(({label})=>label)).toEqual(["Research"]);
+    expect(document.identity.name).toBe("Amina Khan");
   });
 
   it("uses only explicitly approved CV facts and preserves their provenance", () => {

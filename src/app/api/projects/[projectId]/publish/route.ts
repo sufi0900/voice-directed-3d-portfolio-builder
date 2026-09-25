@@ -25,6 +25,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
     const slugConflict = error.message.includes("duplicate key");
     return NextResponse.json({ error: conflict ? "The draft changed before publishing. Wait for it to save, then try again." : slugConflict ? "That public URL is already in use." : error.message, code: conflict ? "REVISION_CONFLICT" : "PUBLISH_FAILED" }, { status: conflict ? 409 : slugConflict ? 409 : 500 });
   }
+  if (document.opportunity.status === "canonical" && document.visitor.enabled) {
+    const { error: knowledgeError } = await supabase.rpc("publish_visitor_documents", { p_project_id: projectId });
+    if (knowledgeError) return NextResponse.json({ error: "The portfolio was published, but Visitor Vox documents were not activated. Apply migration 015 and publish again.", code: "VISITOR_DOCUMENT_PUBLICATION_FAILED" }, { status: 503 });
+  }
   return NextResponse.json({ publication: data?.[0] });
 }
 

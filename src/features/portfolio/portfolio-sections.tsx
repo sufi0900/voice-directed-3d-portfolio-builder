@@ -3,6 +3,7 @@ import Image from "next/image";
 import type { PortfolioSection, SiteDocument } from "@/domain/site-document";
 import { projectsForPresentation } from "@/domain/opportunity";
 import { CinematicBackdrop } from "./cinematic-backdrop";
+import { ProfessionalPortfolioSections } from "./professional-portfolio-sections";
 import { CinemaRoot, SectionScene, type CinemaKind } from "./section-cinema";
 import { isCinematicTemplate } from "./section-cinema-math";
 
@@ -25,6 +26,7 @@ export function PortfolioNavigation({ document, publicBasePath, onNavigateSectio
 }
 
 export function PortfolioSections({ document, editing = false, publicBasePath, onOpenPage }: { document: SiteDocument; editing?: boolean; publicBasePath?: string; onOpenPage?: (pageId: string) => void }) {
+  if (document.design.template === "professional-2d") return <ProfessionalPortfolioSections document={document} editing={editing} publicBasePath={publicBasePath} onOpenPage={onOpenPage} />;
   const cinematic = isCinematicTemplate(document.design.template);
   return <CinemaRoot enabled={cinematic} template={document.design.template} motion={document.scene.motion} intensity={document.scene.intensity}>
     {document.content.order.map((section) => document.content.visibility[section] ? <Section key={section} section={section} document={document} editing={editing} cinematic={cinematic} publicBasePath={publicBasePath} onOpenPage={onOpenPage} /> : null)}

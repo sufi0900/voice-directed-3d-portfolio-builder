@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock3, Copy, Eye, Globe2, Layers3, Maximize2, Minimize2, Palette, PanelRightOpen, Redo2, RotateCcw, Save, Type, Undo2, Volume2, X } from "lucide-react";
+import { Clock3, Copy, Eye, Globe2, Layers3, Maximize2, Minimize2, Palette, PanelRightOpen, Redo2, RotateCcw, Save, Share2, Type, Undo2, Volume2, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { SiteCommand } from "@/domain/commands";
@@ -17,9 +17,9 @@ import { StructuredContent } from "@/features/public/public-content";
 import Image from "next/image";
 import { scrollPreviewContainer } from "./preview-navigation";
 import { SceneRenderer } from "@/features/scene/scene-renderer";
+import { ProfessionalHeroAside } from "@/features/portfolio/professional-hero-aside";
 
 const STORAGE_KEY = "voxfolio-demo-document-v1";
-const backgroundClass = { midnight: "bg-midnight", ink: "bg-ink", plum: "bg-plum", cloud: "bg-cloud", ivory: "bg-ivory" } as const;
 
 type Publication = { slug: string; revision: number; published_at: string; document?: SiteDocument };
 
@@ -31,6 +31,9 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   const [cloudRevision, setCloudRevision] = useState(initialDocument?.revision ?? 0);
   const hydratedDocument = useRef(initialDocument);
   const initialSaveSkipped = useRef(false);
+  const skipExternalHydrateSave = useRef(false);
+  const latestDraft = useRef(state.present);
+  latestDraft.current = state.present;
   const [reducedMotion, setReducedMotion] = useState(false);
   const [previewOnly, setPreviewOnly] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -75,6 +78,7 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     if (!state.hydrated) return;
     if (persistence === "local") localStorage.setItem(STORAGE_KEY, JSON.stringify(state.present));
     setSaved(false);
+    if (skipExternalHydrateSave.current) { skipExternalHydrateSave.current = false; setSaved(true); return; }
     if (persistence === "server" && !initialSaveSkipped.current) { initialSaveSkipped.current = true; setSaved(true); return; }
     const timer = window.setTimeout(async () => {
       if (persistence === "local") return setSaved(true);
@@ -89,10 +93,29 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     return () => window.clearTimeout(timer);
   }, [persistence, saveRetry, state.hydrated, state.present, state.receipts]);
 
+  useEffect(() => {
+    if (persistence !== "server" || !state.hydrated || !saved || saveError || cloudRevision !== state.present.revision) return;
+    const refresh = async () => {
+      if (document.visibilityState !== "visible" || document.activeElement?.matches("input, textarea, [contenteditable=true]")) return;
+      const before = latestDraft.current;
+      try {
+        const response = await fetch(`/api/projects/${before.projectId}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const result = await response.json();
+        if (result.project?.revision <= serverRevision.current || latestDraft.current !== before || document.activeElement?.matches("input, textarea, [contenteditable=true]")) return;
+        skipExternalHydrateSave.current = true;
+        serverRevision.current = result.project.revision; setCloudRevision(result.project.revision);
+        dispatch({ type: "hydrate", document: result.project.document });
+      } catch { /* Keep the local draft until the next refresh. */ }
+    };
+    const timer = window.setInterval(() => void refresh(), 12000);
+    return () => window.clearInterval(timer);
+  }, [cloudRevision, persistence, saved, saveError, state.hydrated, state.present]);
+
   const executeManual = useCallback((command: SiteCommand) => dispatch({ type: "execute", command, source: "manual" }), []);
   const executeVoice = useCallback((command: SiteCommand, next?: SiteDocument) => dispatch({ type: "execute", command, source: "voice", next }), []);
   const undoVoice = useCallback(() => dispatch({ type: "undo", source: "voice" }), []);
-  const navigateFromAssistant = useCallback((target: { section: string; itemId?: string; panel?: "content" | "design" | "scene" }) => {
+  const navigateFromAssistant = useCallback((target: { section: string; itemId?: string; panel?: "content" | "design" | "scene" | "opportunity" }) => {
     setPreviewOnly(false);
     setEditorExpanded(false);
     setPreviewTarget({ section: target.section, ...(target.itemId ? { itemId: target.itemId } : {}) });
@@ -161,10 +184,11 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     setPublication(undefined); setPublishedDocument(undefined); setPublishOpen(false);
   }
 
-  const isLightTheme = state.present.design.template === "professional-2d";
+  const editorPanelRef = useRef<HTMLElement>(null);
+  useEffect(() => { editorPanelRef.current?.scrollTo({ top: 0, behavior: reducedMotion ? "auto" : "smooth" }); }, [state.selectedPanel, previewTarget.section, reducedMotion]);
 
   return (
-    <main className={`studio template-${state.present.design.template} ${backgroundClass[state.present.design.background]} ${previewOnly ? "preview-only" : ""} ${editorExpanded ? "editor-expanded" : ""} ${isLightTheme ? "light-theme" : ""}`} data-accent={state.present.design.accent}>
+    <main className={`studio studio-workspace ${previewOnly ? "preview-only" : ""} ${editorExpanded ? "editor-expanded" : ""}`}>
       <header className="topbar">
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>VOXFOLIO</strong><small>{projectName}</small></div></div>
         <div className="project-state"><span className={saved ? "saved" : "saving"}><Save size={14} />{saveError || (saved ? persistence === "server" ? "Saved to cloud" : "Saved locally" : "Saving…")}</span><i />Revision {state.present.revision}</div>
@@ -180,13 +204,14 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
         </div>
       </header>
 
-      <div className="workspace" style={{ gridTemplateColumns: previewOnly ? undefined : editorExpanded ? "minmax(420px, 1fr) 0 0" : `${editorWidth}px minmax(420px,1fr) ${voiceHidden ? "0px" : `${voiceWidth}px`}` }}>
-        <aside className="editor-panel">
+      <div className="workspace" style={{ gridTemplateColumns: previewOnly ? undefined : editorExpanded ? "minmax(0, 1fr) 0 0" : `${editorWidth}px minmax(420px,1fr) ${voiceHidden ? "0px" : `${voiceWidth}px`}` }}>
+        <aside className="editor-panel" ref={editorPanelRef}>
           <div className="panel-intro"><div className="panel-title-row"><div><p className="eyebrow">PROJECT · PERSONAL PORTFOLIO</p><h1>Shape the experience</h1></div><button type="button" title={editorExpanded ? "Restore workspace" : "Expand editor"} aria-label={editorExpanded ? "Restore workspace" : "Expand editor"} onClick={() => setEditorExpanded((value) => !value)}>{editorExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button></div><p>Use direct controls for precision. Ask the voice agent for broader changes.</p></div>
           <nav className="editor-tabs" aria-label="Editor sections">
             <Tab active={state.selectedPanel === "content"} label="Content" icon={<Type size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "content" })} />
             <Tab active={state.selectedPanel === "design"} label="Design" icon={<Palette size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "design" })} />
             <Tab active={state.selectedPanel === "scene"} label="3D Scene" icon={<Layers3 size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "scene" })} />
+            <Tab active={state.selectedPanel === "opportunity"} label="Opportunities" icon={<Share2 size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "opportunity" })} />
           </nav>
           {state.lastCommandError && <p className="form-message" role="alert">{state.lastCommandError}</p>}
           <div className="expanded-editor-surface"><ManualControls document={state.present} publishedDocument={publishedDocument} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} previewTarget={previewTarget} onPreviewTarget={setPreviewTarget} onPublishItem={publishItem} publishingItemId={publishingItemId || pendingItemPublication?.itemId || (pendingGlobalPublication || publishing ? "__snapshot__" : "")} itemPublishError={itemPublishError} canDirectPublish={persistence === "server" && authenticated && slug.length >= 3} /></div>
@@ -236,14 +261,14 @@ function StudioPreview({ document, target, focusedSkill, execute, reducedMotion,
   }, [reducedMotion, target]);
   const item = target.section === "site pages" ? document.publishing.pages.find((entry) => entry.id === target.itemId) : target.section === "blog posts" ? document.publishing.posts.find((entry) => entry.id === target.itemId) : undefined;
   if (target.section === "blog posts" && target.itemId === "__index__") return <StudioBlogIndex document={document} onNavigate={onNavigate} />;
-  if (target.section === "site pages" || target.section === "blog posts") { const cover = item ? document.media.assets.find((asset) => asset.id === item.coverMediaId) : undefined; return <div ref={previewRef} className="portfolio-preview content-draft-preview"><button type="button" className="preview-back-button" onClick={() => onNavigate({ section: "hero" })}>← Back to homepage preview</button>{item ? <article><p className="section-eyebrow">{target.section === "blog posts" ? "BLOG ARTICLE PREVIEW" : "SITE PAGE PREVIEW"}</p><h1>{item.title}</h1>{"excerpt" in item && item.excerpt && <p className="draft-excerpt">{item.excerpt}</p>}{cover && <figure className="published-content-cover draft-cover"><Image src={cover.url} alt={cover.alt} fill sizes="(max-width: 900px) 94vw, 900px" unoptimized /></figure>}<StructuredContent document={document} blocks={item.blocks} /></article> : <div className="portfolio-empty-state">Create an item to preview it here.</div>}</div>; }
+  if (target.section === "site pages" || target.section === "blog posts") { const cover = item ? document.media.assets.find((asset) => asset.id === item.coverMediaId) : undefined; return <div ref={previewRef} className={`portfolio-preview content-draft-preview template-${document.design.template}`} data-accent={document.design.accent}><button type="button" className="preview-back-button" onClick={() => onNavigate({ section: "hero" })}>← Back to homepage preview</button>{item ? <article><p className="section-eyebrow">{target.section === "blog posts" ? "BLOG ARTICLE PREVIEW" : "SITE PAGE PREVIEW"}</p><h1>{item.title}</h1>{"excerpt" in item && item.excerpt && <p className="draft-excerpt">{item.excerpt}</p>}{cover && <figure className="published-content-cover draft-cover"><Image src={cover.url} alt={cover.alt} fill sizes="(max-width: 900px) 94vw, 900px" unoptimized /></figure>}<StructuredContent document={document} blocks={item.blocks} /></article> : <div className="portfolio-empty-state">Create an item to preview it here.</div>}</div>; }
   const navigateSection = (section: PortfolioSection) => onNavigate({ section });
-  const sceneHint = document.scene.family === "kinetic-gallery" ? "Move to shift perspective · Select a skill" : document.scene.family === "velocity-roadster" ? "Move to steer the light · Watch the road flow" : "Drag to orbit · Scroll to zoom · Select a skill";
-  return <div ref={previewRef} className={`portfolio-preview template-${document.design.template}`}><PortfolioNavigation document={document} onNavigateSection={navigateSection} onNavigatePage={(itemId) => onNavigate({ section: "site pages", itemId })} onNavigateBlog={() => onNavigate({ section: "blog posts", itemId: "__index__" })} /><div className={`portfolio-hero align-${document.design.heroAlignment}`}><div className="ambient-grid" /><div className="portfolio-copy"><p className="availability"><i />{document.identity.availability}</p><p className="kicker">DESIGNING USEFUL DIGITAL SYSTEMS</p><h2>{document.identity.name}</h2><h3>{document.identity.role}</h3><p className="intro">{document.identity.intro}</p><div className="hero-actions"><button type="button" onClick={() => navigateSection("projects")}>View selected work</button><button type="button" className="ghost" onClick={() => navigateSection("contact")}>Start a conversation</button></div>{focusedSkill && <div className="focus-card"><span>SCENE FOCUS</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}</div><div className="scene-stage"><SceneRenderer document={document} execute={execute} reducedMotion={reducedMotion} /><div className="scene-caption"><Volume2 size={14} /><span>{sceneHint}</span></div></div></div><PortfolioSections document={document} editing onOpenPage={(itemId) => onNavigate({ section: "site pages", itemId })} /></div>;
+  const sceneHint = document.scene.family === "kinetic-gallery" ? "Move to shift perspective · Select a skill" : document.scene.family === "velocity-roadster" ? "Move to steer the light · Watch the road flow" : document.scene.family === "professional-2d" ? "" : "Drag to orbit · Scroll to zoom · Select a skill";
+  return <div ref={previewRef} className={`portfolio-preview template-${document.design.template}`} data-accent={document.design.accent}><PortfolioNavigation document={document} onNavigateSection={navigateSection} onNavigatePage={(itemId) => onNavigate({ section: "site pages", itemId })} onNavigateBlog={() => onNavigate({ section: "blog posts", itemId: "__index__" })} /><div className={`portfolio-hero align-${document.design.heroAlignment}`}><div className="ambient-grid" /><div className="portfolio-copy"><p className="availability"><i />{document.identity.availability}</p><p className="kicker">DESIGNING USEFUL DIGITAL SYSTEMS</p><h2>{document.identity.name}</h2><h3>{document.identity.role}</h3><p className="intro">{document.identity.intro}</p><div className="hero-actions"><button type="button" onClick={() => navigateSection("projects")}>View selected work</button><button type="button" className="ghost" onClick={() => navigateSection("contact")}>Start a conversation</button></div>{focusedSkill && <div className="focus-card"><span>SCENE FOCUS</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}</div>{document.design.template === "professional-2d" && <ProfessionalHeroAside document={document} />}{document.design.template !== "professional-2d" && <div className="scene-stage"><SceneRenderer document={document} execute={execute} reducedMotion={reducedMotion} />{sceneHint && <div className="scene-caption"><Volume2 size={14} /><span>{sceneHint}</span></div>}</div>}</div><PortfolioSections document={document} editing onOpenPage={(itemId) => onNavigate({ section: "site pages", itemId })} /></div>;
 }
 
 function StudioBlogIndex({ document, onNavigate }: { document: SiteDocument; onNavigate: (target: PreviewTarget) => void }) {
-  return <div className="portfolio-preview content-draft-preview studio-blog-index"><button type="button" className="preview-back-button" onClick={() => onNavigate({ section: "hero" })}>← Back to homepage preview</button><section className="blog-index"><header><p className="section-eyebrow">BLOG LISTING PREVIEW</p><h1>Ideas, process and field notes</h1><p>Draft and published articles by {document.identity.name}</p></header>{document.publishing.posts.length ? <div>{document.publishing.posts.map((post) => { const cover = document.media.assets.find((asset) => asset.id === post.coverMediaId); return <article key={post.id}>{cover && <div className="blog-card-cover"><Image src={cover.url} alt={cover.alt} fill sizes="430px" unoptimized /></div>}<div><span>{post.status}</span><h2>{post.title}</h2><p>{post.excerpt || "Add an excerpt to introduce this article."}</p><button type="button" onClick={() => onNavigate({ section: "blog posts", itemId: post.id })}>Open article preview</button></div></article>; })}</div> : <div className="portfolio-empty-state">Create an article to populate this Blog listing.</div>}</section></div>;
+  return <div className={`portfolio-preview content-draft-preview studio-blog-index template-${document.design.template}`} data-accent={document.design.accent}><button type="button" className="preview-back-button" onClick={() => onNavigate({ section: "hero" })}>← Back to homepage preview</button><section className="blog-index"><header><p className="section-eyebrow">BLOG LISTING PREVIEW</p><h1>Ideas, process and field notes</h1><p>Draft and published articles by {document.identity.name}</p></header>{document.publishing.posts.length ? <div>{document.publishing.posts.map((post) => { const cover = document.media.assets.find((asset) => asset.id === post.coverMediaId); return <article key={post.id}>{cover && <div className="blog-card-cover"><Image src={cover.url} alt={cover.alt} fill sizes="430px" unoptimized /></div>}<div><span>{post.status}</span><h2>{post.title}</h2><p>{post.excerpt || "Add an excerpt to introduce this article."}</p><button type="button" onClick={() => onNavigate({ section: "blog posts", itemId: post.id })}>Open article preview</button></div></article>; })}</div> : <div className="portfolio-empty-state">Create an article to populate this Blog listing.</div>}</section></div>;
 }
 
 function beginResize(event: React.PointerEvent, initial: number, update: (value: number) => void, min: number, max: number, direction: 1 | -1) {

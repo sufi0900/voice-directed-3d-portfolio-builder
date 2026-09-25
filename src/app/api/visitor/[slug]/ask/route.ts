@@ -1,0 +1,22 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getPublicationSnapshot } from "@/lib/publication-snapshot";
+import { visitorEvidence, matchVisitorEvidence } from "@/lib/visitor-evidence";
+import { claimVisitorUse } from "@/lib/visitor-rate";
+import { connectionAdmin } from "@/lib/external-connection";
+import { documentEvidence } from "@/lib/visitor-document";
+
+const input = z.object({ question: z.string().trim().min(3).max(350) });
+export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const snapshot = await getPublicationSnapshot(slug);
+  if (!snapshot?.document.visitor.enabled || snapshot.document.opportunity.status !== "canonical") return NextResponse.json({ error: "Visitor Vox is unavailable." }, { status: 404 });
+  const parsed = input.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Enter a question under 350 characters." }, { status: 400 });
+  if (!await claimVisitorUse(request, slug, "text")) return NextResponse.json({ error: "Visitor Vox is temporarily unavailable or has reached its usage limit." }, { status: 429 });
+  const { data: documents, error: documentError } = await connectionAdmin().from("visitor_documents").select("id,file_name,body").eq("project_id", snapshot.document.projectId).eq("published", true).limit(10);
+  if (documentError) return NextResponse.json({ error: "Knowledge is temporarily unavailable." }, { status: 503 });
+  const matches = matchVisitorEvidence(parsed.data.question, [...visitorEvidence(snapshot.document, slug), ...documentEvidence(documents ?? [], parsed.data.question)]);
+  const answer = matches.length ? matches[0].text.slice(0, 600) : "I don't have an approved public answer to that question. Please use the portfolio contact details for more information.";
+  return NextResponse.json({ answer, references: matches.map(({ id, href }) => ({ id, href })) }, { headers: { "Cache-Control": "no-store" } });
+}

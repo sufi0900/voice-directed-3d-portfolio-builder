@@ -1,0 +1,41 @@
+# Voxfolio V24.1 — corrected cumulative release
+
+Based on the V23.2 source. All edits in this archive are cumulative; install only this archive.
+
+## Changes
+
+- Guided creation starts with a voice or typed interview; answers fill the existing reviewed fields. An account name is suggested but remains editable. Users can pick and preview one of the existing templates, paste a website URL, optionally approve CV evidence, and create a private draft. Guided drafts no longer inherit sample skills, projects, experience, or location from template showcase content.
+- Visitor Vox is opt-in per portfolio. Owners may upload TXT/MD/PDF/DOCX (maximum 2 MB) and explicitly approve edited excerpts or add notes. The original file is never stored by this feature. Only approved draft notes included in a subsequent publication are available to public visitors. Revocation requires publishing again; disabling also takes effect at the next publication.
+- The published portfolio offers read-only text answers backed by published material and approved notes and optional AssemblyAI voice. Private or shared opportunity variants never show the public assistant. Text questions return a matching excerpt or say that an approved answer is unavailable. Voice can be less deterministic; verify factual responses before relying on it.
+- Daily server-enforced session limits: visitor voice 4/person and 60/portfolio; text 25/person and 600/portfolio. Authenticated onboarding interview 5 voice sessions/account. All are fail closed when metering or keys are unavailable.
+- ChatGPT private custom GPT Actions: create/revoke a project-specific bearer key in Studio → Content → ChatGPT connection; import `/api/connect/openapi` into a **private** GPT action and select API key Bearer. Read current draft before saving a change. All writes pass existing command validation and an atomic revision check; sensitive actions such as publication, media and public Visitor Vox notes stay in Studio. Connections are capped at 3 active keys per project and 100 API calls per key/day. An idle Studio refreshes external revisions after approximately 12 seconds. Shared, multi-account ChatGPT plugins and MCP require proper per-user OAuth and are **not** supported by the private-key action.
+
+## Required deployment steps
+
+1. In the project folder, create `.env.local` by copying `.env.example`. Keep `.env.local` private and do not send it or commit it.
+2. In Supabase → Project Settings → API Keys, copy the server secret/service-role key for this same project into `SUPABASE_SERVICE_ROLE_KEY`. It lets the server call protected database functions; it must never appear in browser code or any `NEXT_PUBLIC_` variable.
+3. Generate a random secret by running `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` in a terminal. Put the output in `VISITOR_AGENT_HASH_SECRET`. It is used only to create daily pseudonymous rate-limit hashes; it is not an AI-provider key.
+4. Put the AssemblyAI API key in `ASSEMBLYAI_API_KEY` if you want voice interview and voice Visitor Vox. Text interview and text Visitor Vox do not need this key. Voice consumes the AssemblyAI account's usage.
+5. In Supabase SQL Editor, run migration `013_public_visitor_agent_limits.sql`, then `014_private_content_connections.sql`. Do not rerun migrations 001–012 if already applied.
+6. Restart the local server after changing `.env.local`. For ChatGPT Actions, deploy to a public HTTPS URL first and set `NEXT_PUBLIC_SITE_URL` to that URL in the hosting environment. ChatGPT cannot reach `localhost`.
+7. Redeploy, sign in, and verify a private GPT Action from the GPT builder Preview. Keep the GPT and project key private; revoke the key on suspected exposure.
+
+## Where to configure the new features
+
+- **Private GPT Action:** open a portfolio in Studio → Content → **ChatGPT connection** → Create private key. In the ChatGPT GPT editor, add an Action, import `https://YOUR-DEPLOYED-HOST/api/connect/openapi`, choose API key authentication with Bearer, and paste the generated key. The key is shown once. This key is created inside Voxfolio; it is not an OpenAI API key. It is scoped to one portfolio, lets the GPT save validated draft edits, and cannot publish. Keep that GPT private. The local `http://localhost:3000` schema URL cannot be called by ChatGPT.
+- **Public Visitor Vox:** open Studio → Content → **Visitor Vox**. Optionally upload a TXT, MD, PDF, or DOCX and approve individual excerpts, or type notes and approve them. Enable Visitor Vox, save, then use the main Publish action. Only a published canonical public portfolio shows the widget. Removing a note or turning the toggle off changes the public site only after publishing the new revision. Private/shared opportunity variants do not show it.
+- **What Visitor Vox knows:** it receives published portfolio content and the approved notes from the published revision. Text replies select a relevant evidence excerpt or say no approved answer was found; this does not generate new knowledge. Voice uses AssemblyAI with the same evidence supplied in its instructions, but generated speech can still make mistakes. Do not upload confidential client documents or facts you do not want public.
+- **What the connection keys mean:** `SUPABASE_SERVICE_ROLE_KEY` and `VISITOR_AGENT_HASH_SECRET` are server configuration set by the project operator in `.env.local`/hosting settings. End users do not create these. End users create only the per-portfolio private GPT Action key inside Studio.
+
+## Manual verification
+
+- **Guided creation:** sign in, open `/start`, choose Build with Vox. Complete the interview by typing, skip the optional education/website questions, choose Professional 2D, and create. Confirm the selected template and entered details appear in Studio, while unprovided skills, projects, and work history remain empty. Repeat with microphone permission. Deny microphone and verify typing still works. If `/start` errors, retry once in a clean Incognito window with browser extensions disabled; extensions can modify the root HTML and create unrelated hydration warnings.
+- **Visitor Vox:** in Studio → Content → Visitor Vox, upload a small test document, edit and approve one excerpt. Confirm no public widget or answer appears before publication. Enable it, save, publish, open `/p/your-slug`, and ask a question matching the note and an unrelated one. Confirm the matching answer is based on approved evidence and the unrelated question gets the “I don't know” fallback. If configured, test voice with a low number of short sessions. Remove the note or disable the feature, publish again, and confirm the widget or removed answer is gone. Check a private/shared variant has no widget.
+- **Private GPT Action:** on the deployed HTTPS site, create a key under Studio → Content → ChatGPT connection, add the OpenAPI URL in a private GPT Action, and test with GPT Preview. Read the draft, save an About edit, see a new revision and the open Studio update. Send an old revision and expect `409`; try a publish command and expect `400`; revoke the key and confirm later reads fail. Never share the key in screenshots, logs, or a shared GPT.
+- Check `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm build` after setup. Avoid repeated rate-limit tests on a real project; voice requests consume provider usage.
+
+V24.1 fixes the guided interview's React effect setup and cleanup, which caused the captured `useEffect` / `destroy is not a function` errors while mounting the Vox flow. The captured `data-google-analytics-opt-out` HTML hydration difference comes from a browser extension altering the document root; verify in Incognito or with that extension disabled. The app does not set that attribute.
+
+## Known integration boundary
+
+The private GPT Action provides the requested ChatGPT editing workflow for a single owner's private GPT. A distributable multi-user ChatGPT plugin/MCP would need OAuth authorization and a hosted HTTPS endpoint; a project bearer key is intentionally not accepted as a shared plugin credential. The published voice model follows an evidence-restricted prompt but cannot cryptographically guarantee the absence of hallucinations, so high-stakes answers require independent verification.

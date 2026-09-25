@@ -58,7 +58,7 @@ export const TEMPLATE_CONTRACTS: readonly TemplateContract[] = [
   {
     id: "professional-2d",
     name: "Professional 2D",
-    description: "A clean, accessible light-mode layout with no 3D scene — pure typography and whitespace.",
+    description: "An editorial portfolio with warm paper surfaces, portrait-led About, career record, skills, projects, and a dedicated contact experience.",
     audience: "Corporate professionals, academics, and minimalists",
     presentation: { accent: "violet", background: "ivory", heroAlignment: "center", sceneFamily: "professional-2d", scenePreset: "minimal", motion: "still", intensity: 0.4 },
   },

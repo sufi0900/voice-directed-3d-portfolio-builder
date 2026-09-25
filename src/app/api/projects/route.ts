@@ -4,10 +4,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { buildGuidedDocument, getTemplate } from "@/domain/templates";
 import { cvProvenanceSchema, siteDocumentSchema } from "@/domain/site-document";
 import { guidedInterviewSchema } from "@/domain/guided-interview";
+import { templateOptions } from "@/domain/template-contracts";
 
 const createSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("template"), templateId: z.string().min(1), projectName: z.string().trim().min(1).max(80) }),
-  z.object({ mode: z.literal("guided"), projectName: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(60), role: z.string().trim().min(1).max(80), intro: z.string().trim().min(1).max(220), skills: z.array(z.string().trim().min(1).max(32)).max(8).default([]), education: z.array(z.string().trim().min(1).max(220)).max(8).default([]), cv: cvProvenanceSchema.optional(), interview: guidedInterviewSchema }),
+  z.object({ mode: z.literal("guided"), templateId: z.enum(templateOptions).optional(), projectName: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(60), role: z.string().trim().min(1).max(80), intro: z.string().trim().min(1).max(220), skills: z.array(z.string().trim().min(1).max(32)).max(8).default([]), education: z.array(z.string().trim().min(1).max(220)).max(8).default([]), website: z.union([z.literal(""),z.string().url().refine((url)=>/^https?:\/\//.test(url))]).default(""), cv: cvProvenanceSchema.optional(), interview: guidedInterviewSchema }),
   z.object({ mode: z.literal("demo"), projectName: z.string().trim().min(1).max(80), document: siteDocumentSchema }),
 ]);
 
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
       style: input.data.interview.tone === "structured" ? "technical" : input.data.interview.tone === "minimal" ? "minimal" : "creative",
     }) : { ...input.data.document, projectId, revision: 0, updatedAt: new Date().toISOString() };
   if (!document) return NextResponse.json({ error: "Template not found" }, { status: 404 });
-  const row = { id: projectId, owner_id: user.id, name: input.data.projectName, creation_mode: input.data.mode === "demo" ? "guided" : input.data.mode, template_id: input.data.mode === "template" ? input.data.templateId : null, document, revision: 0 };
+  const row = { id: projectId, owner_id: user.id, name: input.data.projectName, creation_mode: input.data.mode === "demo" ? "guided" : input.data.mode, template_id: input.data.mode === "template" || input.data.mode === "guided" ? input.data.templateId ?? null : null, document, revision: 0 };
   const { error } = await supabase.from("projects").insert(row);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const { error: revisionError } = await supabase.from("project_revisions").insert({ project_id: projectId, owner_id: user.id, revision: 0, document, source: "created" });

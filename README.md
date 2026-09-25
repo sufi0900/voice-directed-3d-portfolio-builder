@@ -1,5 +1,7 @@
 # Voice-Directed 3D Portfolio Builder
 
+For V24.2 setup, migration 015 and the manual test checklist, read [RELEASE_V24_2.md](RELEASE_V24_2.md) before enabling persistent Visitor Vox knowledge.
+
 An implementation-ready portfolio builder in which authenticated cloud projects, manual editing, and AssemblyAI voice tools use the same validated, reversible command pipeline.
 
 ## Included in this milestone

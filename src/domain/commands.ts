@@ -19,6 +19,9 @@ import { reviewOpportunity } from "./opportunity-review";
 
 export const siteCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("identity.set"), field: z.enum(["name", "role", "intro", "availability"]), value: z.string() }),
+  z.object({ type: z.literal("visitor.enable"), enabled: z.boolean() }),
+  z.object({ type: z.literal("visitor.addFact"), text: z.string().trim().min(10).max(900), source: z.string().trim().min(1).max(120) }),
+  z.object({ type: z.literal("visitor.removeFact"), id: z.string().uuid() }),
   z.object({ type: z.literal("design.setAccent"), value: z.enum(accentOptions) }),
   z.object({ type: z.literal("design.setBackground"), value: z.enum(backgroundOptions) }),
   z.object({ type: z.literal("design.setHeroAlignment"), value: z.enum(alignmentOptions) }),
@@ -99,6 +102,18 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
   let next: SiteDocument;
 
   switch (command.type) {
+    case "visitor.enable":
+      if (current.visitor.enabled === command.enabled) return current;
+      next = { ...current, visitor: { ...current.visitor, enabled: command.enabled }, ...nextRevision(current) };
+      break;
+    case "visitor.addFact":
+      if (current.visitor.facts.length >= 24) throw new Error("Visitor Vox supports up to 24 approved notes.");
+      next = { ...current, visitor: { ...current.visitor, facts: [...current.visitor.facts, { id: crypto.randomUUID(), text: command.text, source: command.source }] }, ...nextRevision(current) };
+      break;
+    case "visitor.removeFact":
+      if (!current.visitor.facts.some((fact) => fact.id === command.id)) throw new Error("Approved note not found.");
+      next = { ...current, visitor: { ...current.visitor, facts: current.visitor.facts.filter((fact) => fact.id !== command.id) }, ...nextRevision(current) };
+      break;
     case "identity.set":
       if (command.value.trim() === current.identity[command.field]) return current;
       next = { ...current, identity: { ...current.identity, [command.field]: command.value.trim() }, ...nextRevision(current) };
@@ -149,7 +164,6 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       break;
     }
     case "skill.remove":
-      if (current.skills.length <= 3) throw new Error("Keep at least three featured skills in the portfolio.");
       if (!current.skills.some((skill) => skill.id === command.skillId)) throw new Error("The requested skill does not exist in this portfolio.");
       next = { ...current, skills: current.skills.filter((skill) => skill.id !== command.skillId), scene: { ...current.scene, focusedSkill: current.scene.focusedSkill === command.skillId ? null : current.scene.focusedSkill }, ...nextRevision(current) };
       break;
@@ -440,6 +454,9 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
 
 export function describeCommand(command: SiteCommand, document: SiteDocument) {
   switch (command.type) {
+    case "visitor.enable": return command.enabled ? "Enabled Visitor Vox for the next publication." : "Disabled Visitor Vox for the next publication.";
+    case "visitor.addFact": return "Approved a public Visitor Vox note.";
+    case "visitor.removeFact": return "Removed a public Visitor Vox note.";
     case "identity.set": return `Updated ${command.field}.`;
     case "design.setAccent": return `Changed the accent to ${command.value}.`;
     case "design.setBackground": return `Changed the background to ${command.value}.`;

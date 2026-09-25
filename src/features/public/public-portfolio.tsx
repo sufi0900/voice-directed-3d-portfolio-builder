@@ -5,6 +5,8 @@ import type { SiteDocument } from "@/domain/site-document";
 import { PortfolioNavigation, PortfolioSections } from "@/features/portfolio/portfolio-sections";
 import { SceneRenderer } from "@/features/scene/scene-renderer";
 import { ShareFeedbackWidget } from "./share-feedback-widget";
+import { ProfessionalHeroAside } from "@/features/portfolio/professional-hero-aside";
+import { VisitorVox } from "./visitor-vox";
 const backgroundClass = { midnight: "bg-midnight", ink: "bg-ink", plum: "bg-plum", cloud: "bg-cloud", ivory: "bg-ivory" } as const;
 
 export function PublicPortfolio({
@@ -39,11 +41,13 @@ export function PublicPortfolio({
         <div className="hero-actions"><a href={`${path}/projects`}>View selected work</a><a className="ghost" href="#contact">Start a conversation</a></div>
         {focusedSkill && <div className="focus-card"><span>FEATURED CAPABILITY</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}
         </div>
-        <div className="scene-stage"><SceneRenderer document={document} execute={() => undefined} reducedMotion={reducedMotion} /></div>
+        {document.design.template === "professional-2d" && <ProfessionalHeroAside document={document} />}
+        {document.design.template !== "professional-2d" && <div className="scene-stage"><SceneRenderer document={document} execute={() => undefined} reducedMotion={reducedMotion} /></div>}
       </section>
       <PortfolioSections document={document} publicBasePath={path} />
     </div>
     <footer className="public-footer"><span>Built with Voxfolio</span><small>Published revision {document.revision}</small></footer>
     {isShared && shareToken && <ShareFeedbackWidget shareToken={shareToken} />}
+    {!isShared && document.opportunity.status === "canonical" && document.visitor.enabled && <VisitorVox slug={slug} name={document.identity.name} />}
   </main>;
 }

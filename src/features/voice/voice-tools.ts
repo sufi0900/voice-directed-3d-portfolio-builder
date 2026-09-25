@@ -4,7 +4,7 @@ import type { SiteDocument } from "@/domain/site-document";
 export type AssistantNavigation = {
   section: string;
   itemId?: string;
-  panel?: "content" | "design" | "scene";
+  panel?: "content" | "design" | "scene" | "opportunity";
 };
 export type VoiceToolResult = { ok: true; message: string; navigation?: AssistantNavigation } | { ok: false; error: string };
 type Execute = (command: SiteCommand) => void;
@@ -68,7 +68,7 @@ export async function runVoiceTool(name: string, rawArguments: unknown, execute:
         if (["draft", "review", "published", "archived"].includes(string("status"))) { execute({ type: "opportunity.setStatus", status: string("status") as "draft" | "review" | "published" | "archived" }); changes += 1; }
         if (["private", "shared", "public"].includes(string("visibility"))) { execute({ type: "opportunity.setVisibility", visibility: string("visibility") as "private" | "shared" | "public" }); changes += 1; }
         if (Array.isArray(values.included_project_ids)) { execute({ type: "opportunity.setIncludedProjects", projectIds: values.included_project_ids.map(String) }); changes += 1; }
-        return changes ? { ok: true, message: "Updated the opportunity variant for your review.", navigation: { section: "opportunity", panel: "content" } } : { ok: false, error: "Specify an opportunity field to update." };
+        return changes ? { ok: true, message: "Updated the opportunity variant for your review.", navigation: { section: "opportunity", panel: "opportunity" } } : { ok: false, error: "Specify an opportunity field to update." };
       }
       case "create_opportunity_variant": {
         if (!document || document.opportunity.status !== "canonical") {
@@ -83,7 +83,7 @@ export async function runVoiceTool(name: string, rawArguments: unknown, execute:
         }
         // This navigates to the projects page where the variant creation happens
         // The actual creation is done via the API from the projects dashboard
-        return { ok: true, message: `Ready to create opportunity variant "${title}" for ${audience}. Opening My Projects to complete creation.`, navigation: { section: "opportunity", panel: "content" } };
+        return { ok: true, message: `Ready to create opportunity variant "${title}" for ${audience}. Opening My Projects to complete creation.`, navigation: { section: "opportunity", panel: "opportunity" } };
       }
       case "compare_opportunity_source": {
         if (!document || document.opportunity.status === "canonical") {
@@ -92,7 +92,7 @@ export async function runVoiceTool(name: string, rawArguments: unknown, execute:
         if (!document.opportunity.canonicalProjectId) {
           return { ok: false, error: "This variant has no linked canonical portfolio to compare against." };
         }
-        return { ok: true, message: "Opening source review to compare this variant with its canonical portfolio.", navigation: { section: "opportunity_source_review", panel: "content" } };
+        return { ok: true, message: "Opening source review to compare this variant with its canonical portfolio.", navigation: { section: "opportunity_source_review", panel: "opportunity" } };
       }
       case "accept_opportunity_source_changes": {
         if (!document || document.opportunity.status === "canonical") {
@@ -103,22 +103,22 @@ export async function runVoiceTool(name: string, rawArguments: unknown, execute:
           return { ok: false, error: "Provide at least one change key to accept (e.g., role, hero_intro, about_heading, about_body, case_study:<id>)." };
         }
         // The actual acceptance is done via the API from the source review panel
-        return { ok: true, message: `Preparing to accept ${changeKeys.length} change${changeKeys.length === 1 ? "" : "s"} from the canonical source. Opening source review to complete.`, navigation: { section: "opportunity_source_review", panel: "content" } };
+        return { ok: true, message: `Preparing to accept ${changeKeys.length} change${changeKeys.length === 1 ? "" : "s"} from the canonical source. Opening source review to complete.`, navigation: { section: "opportunity_source_review", panel: "opportunity" } };
       }
       case "manage_opportunity_shares": {
         const action = string("action");
         if (action === "create") {
-          return { ok: true, message: "Opening the opportunity shares panel to create a private link. Explicit consent is required before the link is created.", navigation: { section: "opportunity_shares", panel: "content" } };
+          return { ok: true, message: "Opening the opportunity shares panel to create a private link. Explicit consent is required before the link is created.", navigation: { section: "opportunity_shares", panel: "opportunity" } };
         }
         if (action === "revoke") {
           const shareId = string("share_id");
           if (!shareId) return { ok: false, error: "Provide the share ID to revoke." };
-          return { ok: true, message: "Opening the opportunity shares panel to revoke the link.", navigation: { section: "opportunity_shares", panel: "content", itemId: shareId } };
+          return { ok: true, message: "Opening the opportunity shares panel to revoke the link.", navigation: { section: "opportunity_shares", panel: "opportunity", itemId: shareId } };
         }
         if (action === "view_feedback") {
           const shareId = string("share_id");
           if (!shareId) return { ok: false, error: "Provide the share ID to view feedback." };
-          return { ok: true, message: "Opening the opportunity shares panel to view recipient feedback.", navigation: { section: "opportunity_shares", panel: "content", itemId: shareId } };
+          return { ok: true, message: "Opening the opportunity shares panel to view recipient feedback.", navigation: { section: "opportunity_shares", panel: "opportunity", itemId: shareId } };
         }
         return { ok: false, error: "Choose create, revoke, or view_feedback." };
       }

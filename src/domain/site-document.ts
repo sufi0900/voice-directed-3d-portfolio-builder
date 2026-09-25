@@ -171,7 +171,7 @@ export const siteDocumentSchema = z.object({
     intensity: z.number().min(0.4).max(1.4),
     focusedSkill: z.string().nullable(),
   }),
-  skills: z.array(z.object({ id: z.string(), label: z.string().min(1).max(32), level: z.number().min(1).max(5) })).min(3).max(8),
+  skills: z.array(z.object({ id: z.string(), label: z.string().min(1).max(32), level: z.number().min(1).max(5) })).max(8),
   content: portfolioContentSchema.default(DEFAULT_PORTFOLIO_CONTENT),
   media: z.object({
     headshotUrl: z.union([z.literal(""), z.string().url()]),
@@ -188,6 +188,10 @@ export const siteDocumentSchema = z.object({
     pages: z.array(customPageSchema).max(12).default([]),
     posts: z.array(blogPostSchema).max(24).default([]),
   }).default({ pages: [], posts: [] }),
+  visitor: z.object({
+    enabled: z.boolean().default(false),
+    facts: z.array(z.object({ id: z.string().uuid(), text: z.string().trim().min(10).max(900), source: z.string().trim().min(1).max(120) })).max(24).default([]),
+  }).default({ enabled: false, facts: [] }),
   opportunity: opportunitySchema,
   guidedInterview: z.object({
     goal: z.enum(["win-clients", "showcase-work", "find-role"]),
@@ -243,6 +247,7 @@ export const DEFAULT_SITE_DOCUMENT: SiteDocument = {
   },
   media: { headshotUrl: "", headshotAlt: "", assets: [] },
   publishing: { pages: [], posts: [] },
+  visitor: { enabled: false, facts: [] },
   opportunity: { status: "canonical", canonicalProjectId: null, variantOfProjectId: null, sourceRevision: null, name: "", type: "custom", title: "", brief: "", audience: "", objective: "", deadline: null, confidentiality: "private", visibility: "private", slug: "", includedProjectIds: [], approvalNotes: "", heroOverride: "", projectOrder: [], sourceSnapshot: { name: "", role: "", intro: "", aboutHeading: "", aboutBody: "", projectIds: [] } },
 };
 

@@ -257,7 +257,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
     playAssistantCue("activate", soundsEnabled);
     try {
       const [tokenResponse, memoryResponse] = await Promise.all([
-        fetch("/api/assemblyai/token", { cache: "no-store" }),
+        fetch(`/api/assemblyai/token?projectId=${encodeURIComponent(documentRef.current.projectId)}`, { cache: "no-store" }),
         fetch(`/api/projects/${documentRef.current.projectId}/memory`, { cache: "no-store", signal: AbortSignal.timeout(3_500) }).catch(() => null),
       ]);
       const memoryPayload = memoryResponse?.ok ? await memoryResponse.json() as { facts?: Array<{ fact: string }> } : null;

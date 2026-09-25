@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const projectId = new URL(request.url).searchParams.get("projectId");
+  if (!projectId) return NextResponse.json({ error: "Select a portfolio." }, { status: 400 });
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Sign in to use voice editing." }, { status: 401 });
+  const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).eq("owner_id", user.id).maybeSingle();
+  if (!project) return NextResponse.json({ error: "Portfolio not found." }, { status: 404 });
   const apiKey = process.env.ASSEMBLYAI_API_KEY;
 
   if (!apiKey) {
@@ -14,7 +22,7 @@ export async function GET() {
 
   const url = new URL("https://agents.assemblyai.com/v1/token");
   url.searchParams.set("expires_in_seconds", "120");
-  url.searchParams.set("max_session_duration_seconds", "900");
+  url.searchParams.set("max_session_duration_seconds", "600");
 
   try {
     const response = await fetch(url, {
