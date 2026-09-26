@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { buildGuidedDocument, getTemplate } from "@/domain/templates";
-import { cvProvenanceSchema, siteDocumentSchema } from "@/domain/site-document";
-import { guidedInterviewSchema } from "@/domain/guided-interview";
-import { templateOptions } from "@/domain/template-contracts";
+import { siteDocumentSchema } from "@/domain/site-document";
+import { guidedCreateSchema, describeCreationIssue } from "@/domain/project-creation";
 
 const createSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("template"), templateId: z.string().min(1), projectName: z.string().trim().min(1).max(80) }),
-  z.object({ mode: z.literal("guided"), templateId: z.enum(templateOptions).optional(), projectName: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(60), role: z.string().trim().min(1).max(80), intro: z.string().trim().min(1).max(220), skills: z.array(z.string().trim().min(1).max(32)).max(8).default([]), education: z.array(z.string().trim().min(1).max(220)).max(8).default([]), website: z.union([z.literal(""),z.string().url().refine((url)=>/^https?:\/\//.test(url))]).default(""), cv: cvProvenanceSchema.optional(), interview: guidedInterviewSchema }),
+  guidedCreateSchema,
   z.object({ mode: z.literal("demo"), projectName: z.string().trim().min(1).max(80), document: siteDocumentSchema }),
 ]);
 
@@ -23,7 +22,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const input = createSchema.safeParse(await request.json());
-  if (!input.success) return NextResponse.json({ error: "Invalid project details", issues: input.error.issues }, { status: 400 });
+  if (!input.success) return NextResponse.json({ error: describeCreationIssue(input.error.issues[0]), issues: input.error.issues }, { status: 400 });
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

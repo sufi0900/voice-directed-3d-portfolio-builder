@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applySiteCommand, formatCommandError, type SiteCommand } from "@/domain/commands";
 import type { SiteDocument } from "@/domain/site-document";
-import { createVoiceTools, runVoiceTool, type AssistantNavigation, type VoiceToolResult } from "./voice-tools";
+import { createVoiceTools, runVoiceTool, type AssistantNavigation, type VoiceToolResult, type PublicationVoiceAction } from "./voice-tools";
 import { playAssistantCue } from "./assistant-sounds";
 import { planLocalAssistant, type AssistantPlan } from "./local-assistant";
 import { executeAssistantSteps } from "./assistant-steps";
@@ -16,15 +16,16 @@ type VoiceOptions = {
   execute: (command: SiteCommand, next?: SiteDocument) => void;
   undo: () => void;
   navigate: (target: AssistantNavigation) => void;
+  publication?: PublicationVoiceAction;
 };
 
 type AgentEvent = Record<string, unknown> & { type?: string; text?: string; delta?: string; status?: string; call_id?: string; name?: string; arguments?: unknown; data?: string; message?: string; session_id?: string; item_id?: string; reply_id?: string };
 type PendingTool = { callId: string; result: unknown };
 
 const WELCOME: TranscriptItem = { id: "welcome", speaker: "system", text: "Voice can edit every portfolio section and review an opportunity variant. Navigation and exact-text edits keep working even if AI writing is temporarily unavailable.", final: true };
-const SYSTEM_PROMPT = `You are Vox, a concise portfolio editing assistant inside a visual editor. You can navigate and edit Hero, About, Skills, Experience, Education, Projects, Contact, opportunity variants, standalone pages, blog drafts, section structure, design, and the 3D scene through the provided tools. For every go, show, open, navigate, or jump request, call navigate_to. Use a function tool for every requested visible change and never claim success before its result confirms it. Editing tools automatically focus the relevant Studio editor and Live Canvas section. A canonical portfolio is source evidence; never modify it merely because a user discusses an opportunity. A variant may be tailored only through visible tools and only from existing approved evidence. When the user gives rough narrative copy for an introduction, About paragraph, experience summary, education summary, or project summary, pass their raw facts to the relevant tool with polishing enabled. Polishing may improve wording but must never invent achievements, metrics, employers, dates, qualifications, links, or skills. If AI polishing is unavailable, explain briefly that navigation and exact-text edits still work, then ask the user to dictate or paste the exact wording; apply that wording without polishing. Ask one short clarification when a required value or target item is ambiguous. You cannot publish, delete a project, upload files, create nested variants, or execute code. Keep spoken replies under two sentences.`;
+const SYSTEM_PROMPT = `You are Vox, a concise portfolio creation and editing assistant. You can navigate and edit Hero, About, Skills, Experience, Education, Projects, Contact, opportunity variants, standalone pages, blog drafts, section structure, design, and the 3D scene using tools. For go/show/open/jump, call navigate_to. Never claim a visible change before a tool result confirms it. Editing focuses the relevant Studio and Live Canvas. Never invent achievements, metrics, employers, qualifications, links, skills or dates. Exact names, institutions, employers, project/page titles, and URLs are held for read-back by the tool executor. Read the proposed value exactly, then wait for the owner's explicit confirmation on a later turn before calling confirm_exact_edit with review_id. Do not say the change is applied before confirmation. If AI polishing is unavailable, navigation and exact-text edits still work. To publish, first call review_publication; read its summary aloud and ask for confirmation. Only on a later turn clearly confirming that exact review call confirm_publication with review_id. Never claim success unless the tool confirms it. Private opportunity variants cannot be publicly published. You cannot delete projects, upload files, or execute code. Keep spoken replies brief.`;
 
-export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceOptions) {
+export function useAssemblyAIAgent({ document, execute, undo, navigate, publication }: VoiceOptions) {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [transcript, setTranscript] = useState<TranscriptItem[]>([WELCOME]);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +48,12 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
   const undoRef = useRef(undo);
   const documentRef = useRef(document);
   const navigateRef = useRef(navigate);
+  const publicationRef = useRef(publication);
+  const lastUserRequestRef = useRef("");
+  const userTurnRef = useRef(0);
+  const publishReviewTurnRef = useRef(-1);
+  const publicationReviewIdRef = useRef("");
+  const exactEditRef = useRef<{ id: string; name: string; arguments: unknown; turn: number } | null>(null);
   const transcriptStorageKeyRef = useRef("");
   const skipTranscriptWriteRef = useRef(false);
 
@@ -54,6 +61,17 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
   useEffect(() => { undoRef.current = undo; }, [undo]);
   useEffect(() => { documentRef.current = document; }, [document]);
   useEffect(() => { navigateRef.current = navigate; }, [navigate]);
+  useEffect(() => { publicationRef.current = publication; }, [publication]);
+  const publicationAction = useCallback<PublicationVoiceAction>((action, values) => {
+    if (!publicationRef.current) return { ok: false, error: "Publishing needs a saved, signed-in portfolio." };
+    if (action === "review") {
+      publishReviewTurnRef.current = userTurnRef.current;
+      return publicationRef.current(action, values);
+    }
+    if (userTurnRef.current <= publishReviewTurnRef.current || !/^(yes|confirm|publish|go ahead|please publish|do it)\b/i.test(lastUserRequestRef.current.trim())) return { ok: false, error: "Please explicitly confirm the reviewed publication on a separate turn." };
+    publishReviewTurnRef.current = -1;
+    return publicationRef.current(action, values);
+  }, []);
 
   useEffect(() => {
     const key = `voxfolio-assistant-transcript:${document.projectId}`;
@@ -113,6 +131,8 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
 
   const applyResult = useCallback((result: VoiceToolResult) => {
     if (result.ok && result.navigation) navigateRef.current(result.navigation);
+    if (result.ok && result.reviewId) publicationReviewIdRef.current = result.reviewId;
+    if (result.ok && result.message.startsWith("Published the confirmed selection")) publicationReviewIdRef.current = "";
     if (result.ok) playAssistantCue("success", soundsEnabled);
     return result;
   }, [soundsEnabled]);
@@ -127,6 +147,45 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
     }
   }, []);
 
+  const runValidatedTool = useCallback(async (name: string, args: unknown): Promise<VoiceToolResult> => {
+    let parsed: unknown;
+    try { parsed = typeof args === "string" ? JSON.parse(args) as unknown : args; }
+    catch { return { ok: false, error: "The assistant supplied invalid action details. Please try again." }; }
+    if (name === "review_publication") exactEditRef.current = null;
+    if (name === "summarize_projects") {
+      try {
+        const response = await fetch("/api/projects", { cache: "no-store" });
+        if (!response.ok) return { ok: false, error: "I could not open your saved projects. Check your sign-in and try again." };
+        const payload = await response.json() as { projects?: Array<{ name: string; revision: number }> };
+        const projects = payload.projects ?? [];
+        return { ok: true, message: projects.length ? `You have ${projects.length} saved portfolio${projects.length === 1 ? "" : "s"}. ${projects.slice(0, 5).map(item => `${item.name}, revision ${item.revision}`).join("; ")}. Open My projects in the header to manage them.` : "You do not have a saved portfolio yet. Start with Vox to build your first draft." };
+      } catch { return { ok: false, error: "The projects dashboard is temporarily unavailable. Your current draft is unaffected." }; }
+    }
+    if (name === "confirm_exact_edit") {
+      const values = parsed as Record<string, unknown>;
+      const pending = exactEditRef.current;
+      if (!pending || !values || values.review_id !== pending.id) return { ok: false, error: "That exact-detail review expired. Please state the detail again." };
+      if (userTurnRef.current <= pending.turn || !/^(yes|correct|confirm|that's right|that is right|exactly|approve|looks right|sounds right)\b/i.test(lastUserRequestRef.current.trim())) return { ok: false, error: "Explicitly confirm the read-back on a separate turn before changing an exact detail." };
+      exactEditRef.current = null;
+      return runVoiceTool(pending.name, pending.arguments, executeSafely, undoRef.current, polish, documentRef.current, publicationAction);
+    }
+    const values = parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+    const exactKeys = name === "update_text_content" && ["hero_name", "hero_role", "contact_email"].includes(String(values.target))
+      ? ["text"] : name === "manage_education" ? ["credential", "institution"]
+      : name === "manage_experience" ? ["role", "organization"]
+      : name === "manage_project" ? ["title", "link", "case_study_slug"]
+      : name === "manage_page_or_post" ? ["title", "slug"]
+      : name === "manage_social_link" ? ["url"] : [];
+    const exactValues = exactKeys.filter(key => typeof values[key] === "string" && String(values[key]).trim()).map(key => `${key}: ${String(values[key]).trim()}`);
+    if (exactValues.length && String(values.action ?? "update") !== "remove") {
+      const id = crypto.randomUUID();
+      publicationReviewIdRef.current = "";
+      exactEditRef.current = { id, name, arguments: args, turn: userTurnRef.current };
+      return { ok: true, exactReviewId: id, message: `I heard ${exactValues.join("; ")}. Please check the exact spelling and say yes to apply this change, or provide a correction. Review ID: ${id}. No change has been made yet.` };
+    }
+    return runVoiceTool(name, args, executeSafely, undoRef.current, polish, documentRef.current, publicationAction);
+  }, [executeSafely, polish, publicationAction]);
+
   useEffect(() => {
     if (!soundsEnabled || (!textBusy && status !== "processing")) return;
     const timer = window.setInterval(() => playAssistantCue("processing", true), 1600);
@@ -136,6 +195,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
   const cleanup = useCallback(async () => {
     playbackRef.current.forEach((node) => { try { node.stop(); } catch {} });
     playbackRef.current = [];
+    playbackTimeRef.current = 0;
     workletRef.current?.disconnect();
     sourceRef.current?.disconnect();
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -165,6 +225,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
   const playAudio = useCallback((encoded: string) => {
     const context = contextRef.current;
     if (!context) return;
+    if (context.state === "suspended") void context.resume().catch(() => setError("Audio playback is blocked. Check browser sound permissions and the selected output device, then restart Vox."));
     const binary = atob(encoded);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
@@ -205,7 +266,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
     }
     if (type === "reply.audio" && typeof event.data === "string") playAudio(event.data);
     if (type === "transcript.user.delta" && typeof event.text === "string") updateLiveTranscript(`user-${event.item_id ?? "utterance"}`, "user", event.text, false);
-    if (type === "transcript.user" && typeof event.text === "string") updateLiveTranscript(`user-${event.item_id ?? "utterance"}`, "user", event.text, true);
+    if (type === "transcript.user" && typeof event.text === "string") { lastUserRequestRef.current = event.text; userTurnRef.current += 1; updateLiveTranscript(`user-${event.item_id ?? "utterance"}`, "user", event.text, true); }
     if (type === "transcript.agent.delta" && typeof event.delta === "string") updateLiveTranscript(`agent-${event.reply_id ?? "reply"}`, "agent", event.delta, false, true);
     if (type === "transcript.agent" && typeof event.text === "string") updateLiveTranscript(`agent-${event.reply_id ?? "reply"}`, "agent", event.text, true);
     if (type === "tool.call" && event.call_id && event.name) {
@@ -216,7 +277,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
       const epoch = voiceEpochRef.current;
       voiceQueueRef.current = voiceQueueRef.current.then(async () => {
         if (epoch !== voiceEpochRef.current) return;
-        const result = await runVoiceTool(name, event.arguments, executeSafely, undoRef.current, polish, documentRef.current);
+        const result = await runValidatedTool(name, event.arguments);
         if (epoch !== voiceEpochRef.current) return;
         pendingToolsRef.current.push({ callId, result: applyResult(result) });
         flushTools();
@@ -247,7 +308,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
       appendTranscript("system", message);
       setStatus("error");
     }
-  }, [appendTranscript, applyResult, cleanup, executeSafely, flushTools, playAudio, polish, soundsEnabled, updateLiveTranscript]);
+  }, [appendTranscript, applyResult, cleanup, flushTools, playAudio, runValidatedTool, soundsEnabled, updateLiveTranscript]);
 
   const start = useCallback(async () => {
     if (status !== "idle" && status !== "error") return;
@@ -267,6 +328,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
 
       const context = new AudioContext();
       contextRef.current = context;
+      playbackTimeRef.current = 0;
       await context.resume();
       await context.audioWorklet.addModule("/pcm-processor.js");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false } });
@@ -339,12 +401,18 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
     setError(null);
     setTextBusy(true);
     appendTranscript("user", value);
+    lastUserRequestRef.current = value;
+    userTurnRef.current += 1;
     const pendingReplyId = `typed-agent-${Date.now()}`;
     updateLiveTranscript(pendingReplyId, "agent", "", false);
     playAssistantCue("processing", soundsEnabled);
     setStatus("processing");
     try {
-      const local = planLocalAssistant(value);
+      const local = exactEditRef.current && /^(?:yes|correct|confirm|that's right|that is right|exactly|approve)(?:[.!]|\s+now[.!]?)?$/i.test(value)
+        ? { source: "local" as const, reply: "", calls: [{ name: "confirm_exact_edit", arguments: { review_id: exactEditRef.current.id } }] }
+        : publicationReviewIdRef.current && /^(?:yes|confirm|publish|go ahead|please publish|do it)(?:[.!]|\s+now[.!]?)?$/i.test(value)
+        ? { source: "local" as const, reply: "", calls: [{ name: "confirm_publication", arguments: { review_id: publicationReviewIdRef.current } }] }
+        : planLocalAssistant(value);
       let payload: AssistantPlan & { error?: string };
       if (local) payload = local;
       else {
@@ -357,10 +425,11 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
         payload = await response.json() as AssistantPlan & { error?: string };
         if (!response.ok) throw new Error(payload.error || "The assistant could not process that request.");
       }
-      const outcome = await executeAssistantSteps(payload.calls ?? [], async (call) => applyResult(await runVoiceTool(call.name, call.arguments, executeSafely, undoRef.current, polish, documentRef.current)));
+      const outcome = await executeAssistantSteps(payload.calls ?? [], async (call) => applyResult(await runValidatedTool(call.name, call.arguments)));
+      const publicationResult = outcome.completed.find(result => result.ok && (result.reviewId || result.exactReviewId || result.message.startsWith("Published the confirmed selection")));
       await revealTranscript(pendingReplyId, outcome.error
         ? `${outcome.completed.length} step${outcome.completed.length === 1 ? "" : "s"} completed. I stopped at the next step: ${outcome.error}`
-        : payload.reply ?? "Done.");
+        : publicationResult?.ok ? publicationResult.message : payload.reply ?? "Done.");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "The assistant is temporarily unavailable.";
       setError(message);
@@ -370,7 +439,7 @@ export function useAssemblyAIAgent({ document, execute, undo, navigate }: VoiceO
       setTextBusy(false);
       setStatus(sessionActive ? "listening" : "idle");
     }
-  }, [appendTranscript, applyResult, executeSafely, polish, revealTranscript, sessionActive, soundsEnabled, textBusy, transcript, updateLiveTranscript]);
+  }, [appendTranscript, applyResult, revealTranscript, runValidatedTool, sessionActive, soundsEnabled, textBusy, transcript, updateLiveTranscript]);
 
   useEffect(() => {
     const onPageHide = () => {

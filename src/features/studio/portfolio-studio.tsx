@@ -12,6 +12,7 @@ import { guestClaimPath } from "@/domain/user-lifecycle";
 import { ManualControls, type PreviewTarget } from "./manual-controls";
 import { initialStudioState, studioReducer } from "./studio-reducer";
 import { useAssemblyAIAgent } from "@/features/voice/use-assemblyai-agent";
+import type { VoiceToolResult } from "@/features/voice/voice-tools";
 import { VoicePanel } from "@/features/voice/voice-panel";
 import { RevisionHistory } from "./revision-history";
 import { PortfolioNavigation, PortfolioSections } from "@/features/portfolio/portfolio-sections";
@@ -41,6 +42,7 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   const [publication, setPublication] = useState<Publication | undefined>(initialPublication);
   const [publishedDocument, setPublishedDocument] = useState<SiteDocument | undefined>(initialPublication?.document);
   const [selectedPublication, setSelectedPublication] = useState<string[]>([]);
+  const voiceReviewRef = useRef<{ id: string; selection: string[]; draft: string; slug: string } | null>(null);
   const [publishingItemId, setPublishingItemId] = useState("");
 
   const [publishError, setPublishError] = useState("");
@@ -99,18 +101,53 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     setPreviewTarget({ section: target.section, ...(target.itemId ? { itemId: target.itemId } : {}) });
     dispatch({ type: "selectPanel", panel: target.panel ?? "content" });
   }, []);
-  const voice = useAssemblyAIAgent({ document: state.present, execute: executeVoice, undo: undoVoice, navigate: navigateFromAssistant });
+  async function voicePublication(action: "review" | "confirm", values: Record<string, unknown>): Promise<VoiceToolResult> {
+    if (persistence !== "server" || !authenticated) return { ok: false, error: "Sign in and save the portfolio before publishing." };
+    if (action === "review") {
+      voiceReviewRef.current = null;
+      const document = latestDraft.current;
+      if (document.opportunity.status !== "canonical" && document.opportunity.visibility === "private") return { ok: false, error: "This opportunity is private. Choose Shared or Public in its review panel before publishing.", };
+      const scope = values.scope;
+      if (scope !== "website" && scope !== "post" && scope !== "page") return { ok: false, error: "Choose website, post, or page to publish." };
+      const choices = publicationChoices(document, publishedDocument);
+      let selection: string[];
+      if (scope === "website") selection = choices.filter(row => !row.missing.length).map(row => row.key);
+      else {
+        const key = `${scope}:${String(values.item_id ?? "")}`;
+        const row = choices.find(item => item.key === key);
+        if (!row) return { ok: false, error: `Choose an existing ${scope} by its ID first.` };
+        if (row.missing.length) { navigateFromAssistant({ section: scope === "post" ? "blog posts" : "site pages", itemId: String(values.item_id), panel: "content" }); return { ok: false, error: `Complete ${row.missing.join(", ")} for ${row.label} before publishing.` }; }
+        selection = publishedDocument ? [key] : [...choices.filter(item => item.required).map(item => item.key), key];
+      }
+      if (selection.length === 0 || normalizePublicationSlug(slug).length < 3) return { ok: false, error: "Select publishable content and a valid public URL before reviewing." };
+      const id = crypto.randomUUID();
+      voiceReviewRef.current = { id, selection, draft: JSON.stringify(document), slug: normalizePublicationSlug(slug) };
+      setSelectedPublication(selection); setPublishOpen(true);
+      return { ok: true, reviewId: id, message: `Publication review ${id}. The public URL is /p/${normalizePublicationSlug(slug)}. Selected: ${selection.map(key => choices.find(row => row.key === key)?.label ?? key).join(", ")}. ${choices.filter(row=>row.missing.length).length} incomplete items remain private. Ask for explicit confirmation of exactly this selection on a separate turn.` };
+    }
+    const review = voiceReviewRef.current;
+    if (!review || values.review_id !== review.id) return { ok: false, error: "The publication review expired. Review the items again before publishing." };
+    if (JSON.stringify(latestDraft.current) !== review.draft || normalizePublicationSlug(slug) !== review.slug || JSON.stringify(selectedPublication) !== JSON.stringify(review.selection)) {
+      voiceReviewRef.current = null;
+      return { ok: false, error: "The draft, URL, or selected items changed. Review the new publication before confirming." };
+    }
+    voiceReviewRef.current = null;
+    return performPublication(review.selection);
+  }
+  const voice = useAssemblyAIAgent({ document: state.present, execute: executeVoice, undo: undoVoice, navigate: navigateFromAssistant, publication: voicePublication });
   const focusedSkill = useMemo(() => state.present.skills.find((skill) => skill.id === state.present.scene.focusedSkill), [state.present]);
   const portfolioHasUnpublishedChanges = useMemo(() => Boolean(publication && (hasPublicationChanges(state.present, publishedDocument))), [publication, publishedDocument, state.present]);
 
   const publishChoices = publicationChoices(state.present, publishedDocument);
   function openPublication() {
+    voiceReviewRef.current = null;
     setPublishError("");
     setSelectedPublication(publicationChoices(latestDraft.current, publishedDocument).filter(row=>!row.missing.length).map(row=>row.key));
     setPublishOpen(true);
   }
-  async function performPublication(selection: string[], itemAction?: {kind:"page"|"post";id:string;status:"draft"|"published"}) {
-    if (publishBusy.current) return;
+  async function performPublication(selection: string[], itemAction?: {kind:"page"|"post";id:string;status:"draft"|"published"}): Promise<VoiceToolResult> {
+    if (publishBusy.current) return { ok: false, error: "Publication is already in progress." };
+    voiceReviewRef.current = null;
     publishBusy.current=true;
     setPublishing(true); setPublishError(""); setItemPublishError("");
     if(itemAction) setPublishingItemId(itemAction.id);
@@ -120,9 +157,11 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
       setPublishedDocument(result.document); setPublication({...result.publication,document:result.document});
       setPublishOpen(false);
       if(result.warning) setItemPublishError(result.warning);
+      return { ok: true, message: `Published the confirmed selection at /p/${normalizePublicationSlug(slug)}.${result.warning ? ` Warning: ${result.warning}` : ""}` };
     } catch(cause) {
       const message=cause instanceof Error?cause.message:"Publishing failed. Please retry.";
       if(itemAction) setItemPublishError(message); else setPublishError(message);
+      return { ok: false, error: message };
     } finally { publishBusy.current=false; setPublishing(false); setPublishingItemId(""); }
   }
   function publishItem(kind:"page"|"post",itemId:string,status:"draft"|"published") {
@@ -186,16 +225,16 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
       </div>
       {visibleError && visibleError!==dismissedError && <div className="studio-error-toast" role="alert"><strong>Action needs attention</strong><button type="button" aria-label="Dismiss notification" onClick={()=>setDismissedError(visibleError)}>Dismiss</button><p>{visibleError}</p>{saveError && <button type="button" onClick={()=>void flush().catch(()=>undefined)}>Retry saving</button>}</div>}
       <footer className="command-footer"><span>One governed command pipeline</span><p>Manual edit <b>→</b> validation <b>→</b> revision <b>→</b> undo</p><p>Voice tool <b>→</b> validation <b>→</b> revision <b>→</b> undo</p></footer>
-      {publishOpen && <div className="publish-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPublishOpen(false); }}>
+      {publishOpen && <div className="publish-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { voiceReviewRef.current = null; setPublishOpen(false); } }}>
         <section className="publish-dialog" role="dialog" aria-modal="true" aria-labelledby="publish-title">
-          <header><div><span className="eyebrow">IMMUTABLE PUBLICATION</span><h2 id="publish-title">Choose what goes live</h2></div><button type="button" aria-label="Close publishing dialog" onClick={() => setPublishOpen(false)}><X size={18} /></button></header>
+          <header><div><span className="eyebrow">IMMUTABLE PUBLICATION</span><h2 id="publish-title">Choose what goes live</h2></div><button type="button" aria-label="Close publishing dialog" onClick={() => { voiceReviewRef.current = null; setPublishOpen(false); }}><X size={18} /></button></header>
           <p>Selected items update the live website. Unselected items keep their current live version; new unselected drafts stay private.</p>
           {state.present.opportunity.status !== "canonical" && <div className="publication-guidance"><strong>You are editing an independent opportunity page.</strong><p>Hero and About edits here belong to this opportunity, not your main portfolio.</p>{state.present.opportunity.canonicalProjectId && <Link href={`/studio/${state.present.opportunity.canonicalProjectId}`}>Open main portfolio</Link>}{state.present.opportunity.visibility === "private" && <><p>This opportunity is private. Choose its visibility before publishing.</p><button type="button" onClick={() => { setPublishOpen(false); dispatch({type:"selectPanel",panel:"opportunity"}); }}>Review visibility and approval</button></>}</div>}
           <div className="publication-selection"><button type="button" disabled={publishing} onClick={()=>setSelectedPublication(publishChoices.filter(row=>!row.missing.length).map(row=>row.key))}>Select all ready items</button><button type="button" disabled={publishing} onClick={()=>setSelectedPublication(publishChoices.filter(row=>row.required).map(row=>row.key))}>Clear optional items</button>{publishChoices.map(row=><label key={row.key}><input type="checkbox" disabled={publishing || row.required || Boolean(row.missing.length)} checked={selectedPublication.includes(row.key)} onChange={event=>setSelectedPublication(current=>event.target.checked?[...current,row.key]:current.filter(key=>key!==row.key))}/><span>{row.label}{row.missing.length>0 && <small>Complete: {row.missing.join(", ")} <button type="button" onClick={event=>{event.preventDefault();setPublishOpen(false);setPreviewOnly(false);dispatch({type:"selectPanel",panel:"content"});const [kind,itemId]=row.key.split(":");setPreviewTarget({section:kind==="post"?"blog posts":"site pages",itemId});}}>Review fields</button></small>}</span></label>)}</div>
           <label>Public URL slug<div className="slug-field"><span>/p/</span><input value={slug} maxLength={64} onChange={(event) => setSlug(normalizePublicationSlug(event.target.value))} /></div></label>
           {publication && <div className="live-publication"><strong>Currently live</strong><a href={`/p/${publication.slug}`} target="_blank" rel="noreferrer">/p/{publication.slug}</a><span>Revision {publication.revision}</span><button type="button" aria-label="Copy public URL" onClick={() => navigator.clipboard.writeText(`${window.location.origin}/p/${publication.slug}`)}><Copy size={15} /> Copy URL</button></div>}
           {publishError && <p className="form-message">{publishError}</p>}
-          <footer><button type="button" className="secondary-action" onClick={() => setPublishOpen(false)}>Cancel</button>{publication && <button type="button" className="danger-action" disabled={publishing} onClick={unpublish}>Unpublish</button>}<button type="button" className="primary-action" disabled={publishing || slug.length < 3 || !selectedPublication.length || (state.present.opportunity.status !== "canonical" && state.present.opportunity.visibility === "private")} onClick={() => void performPublication(selectedPublication)}>{publishing ? "Saving & publishing…" : "Publish selected items"}</button></footer>
+          <footer><button type="button" className="secondary-action" onClick={() => { voiceReviewRef.current = null; setPublishOpen(false); }}>Cancel</button>{publication && <button type="button" className="danger-action" disabled={publishing} onClick={unpublish}>Unpublish</button>}<button type="button" className="primary-action" disabled={publishing || slug.length < 3 || !selectedPublication.length || (state.present.opportunity.status !== "canonical" && state.present.opportunity.visibility === "private")} onClick={() => void performPublication(selectedPublication)}>{publishing ? "Saving & publishing…" : "Publish selected items"}</button></footer>
           {!saved && !saveError && <small>Your latest edits will save first, then your selected items will publish.</small>}
           {saveError && <small>The last save failed. “Publish selected items” will retry it before publishing.</small>}
         </section>

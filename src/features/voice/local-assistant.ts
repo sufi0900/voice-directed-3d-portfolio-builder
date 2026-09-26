@@ -26,6 +26,12 @@ export function planLocalAssistant(message: string): AssistantPlan | null {
   const value = message.trim();
   if (!value) return null;
 
+  if (/^(?:please\s+)?(?:show|summari[sz]e|list|tell me about)\s+(?:my\s+)?(?:projects|portfolio dashboard|portfolios)[.!]?$/i.test(value))
+    return { source: "local", reply: "Reading your saved portfolio dashboard.", calls: [{ name: "summarize_projects", arguments: {} }] };
+
+  if (/^(?:please\s+)?(?:publish|review publishing|prepare publication|show publication)(?:\s+(?:my|the))?\s+(?:website|portfolio|site)(?:\s+changes)?[.!]?$/i.test(value))
+    return { source: "local", reply: "Preparing a publication review.", calls: [{ name: "review_publication", arguments: { scope: "website" } }] };
+
   if (/^(?:please\s+)?undo(?:\s+(?:that|the last change))?[.!]?$/i.test(value)) {
     return { source: "local", reply: "I undid the previous change.", calls: [{ name: "undo_last_change", arguments: {} }] };
   }

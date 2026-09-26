@@ -24,4 +24,8 @@ describe("local assistant planner", () => {
     expect(planLocalAssistant("add Accessibility as a skill")?.calls[0]).toMatchObject({ name: "manage_skill", arguments: { label: "Accessibility" } });
     expect(planLocalAssistant("add https://tiktok.com/@sufian as my TikTok profile")?.calls[0]).toMatchObject({ name: "manage_social_link", arguments: { platform: "tiktok" } });
   });
+
+  it("opens the governed publication review without relying on a writing provider", () => {
+    expect(planLocalAssistant("publish my website")?.calls).toEqual([{ name: "review_publication", arguments: { scope: "website" } }]);
+  });
 });

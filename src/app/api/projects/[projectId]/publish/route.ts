@@ -31,7 +31,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
     if(error.message.includes("publication_conflict")) return NextResponse.json({error:"Another session published this portfolio. Reload to review the latest live version before publishing."},{status:409});
     const conflict = error.message.includes("revision_conflict");
     const slugConflict = error.message.includes("duplicate key");
-    return NextResponse.json({ error: conflict ? "The draft changed before publishing. Wait for it to save, then try again." : slugConflict ? "That public URL is already in use." : error.message.includes("publish_project_snapshot") ? "Apply migration 016_publication_snapshot.sql in Supabase, then retry." : error.message, code: conflict ? "REVISION_CONFLICT" : "PUBLISH_FAILED" }, { status: conflict ? 409 : slugConflict ? 409 : 500 });
+    const missingFunction = error.code === "PGRST202" || error.code === "42883";
+    return NextResponse.json({ error: conflict ? "The draft changed before publishing. Wait for it to save, then try again." : slugConflict ? "That public URL is already in use." : missingFunction ? "This Supabase project cannot find the publication function. Apply migration 016_publication_snapshot.sql in the Supabase project connected to this environment, then refresh its API schema and retry. Earlier published sites remain live." : `Publication failed (${error.code ?? "database error"}): ${error.message}`, code: missingFunction ? "PUBLICATION_MIGRATION_MISSING" : conflict ? "REVISION_CONFLICT" : "PUBLISH_FAILED" }, { status: conflict ? 409 : slugConflict ? 409 : 500 });
   }
   let warning: string | undefined;
   if (snapshot.opportunity.status === "canonical" && snapshot.visitor.enabled) {

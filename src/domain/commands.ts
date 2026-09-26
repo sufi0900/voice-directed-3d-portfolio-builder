@@ -64,7 +64,7 @@ export const siteCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("media.addAsset"), asset: z.object({ id: z.string().min(1), url: z.string().url(), storagePath: z.string().min(1).max(500), alt: z.string().trim().min(1).max(180), createdAt: z.string() }) }),
   z.object({ type: z.literal("media.updateAsset"), mediaId: z.string().min(1), alt: z.string().trim().min(1).max(180) }),
   z.object({ type: z.literal("media.removeAsset"), mediaId: z.string().min(1) }),
-  z.object({ type: z.literal("publishing.add"), kind: z.enum(["page", "post"]), title: z.string().trim().min(1).max(120).optional() }),
+  z.object({ type: z.literal("publishing.add"), kind: z.enum(["page", "post"]), title: z.string().trim().min(1).max(120).optional(), excerpt: z.string().trim().max(320).optional(), body: z.string().trim().max(4000).optional(), seoTitle: z.string().trim().max(70).optional(), seoDescription: z.string().trim().max(170).optional() }),
   z.object({ type: z.literal("publishing.update"), kind: z.enum(["page", "post"]), itemId: z.string().min(1), field: z.enum(["title", "slug", "seoTitle", "seoDescription", "coverMediaId", "navigationLabel", "excerpt", "tags"]), value: z.union([z.string(), z.array(z.string())]) }),
   z.object({ type: z.literal("publishing.setContent"), kind: z.enum(["page", "post"]), itemId:z.string().min(1), richContent:richNodeSchema, blocks:z.array(structuredBlockSchema).max(200) }),
   z.object({ type: z.literal("publishing.remove"), kind: z.enum(["page", "post"]), itemId: z.string().min(1) }),
@@ -352,10 +352,10 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       const limit = command.kind === "page" ? 12 : 24;
       if (collection.length >= limit) throw new Error(`A portfolio can contain up to ${limit} ${command.kind}s.`);
       const title = command.title ?? (command.kind === "page" ? "New page" : "New post");
-      const base = { id: crypto.randomUUID(), title, slug: uniquePublishingSlug(current, command.kind, title), seoTitle: "", seoDescription: "", coverMediaId: "", status: "draft" as const, publishedAt: null, blocks: [] };
+      const base = { id: crypto.randomUUID(), title, slug: uniquePublishingSlug(current, command.kind, title), seoTitle: command.seoTitle ?? "", seoDescription: command.seoDescription ?? "", coverMediaId: "", status: "draft" as const, publishedAt: null, blocks: command.body ? [{ id: crypto.randomUUID(), type: "paragraph" as const, text: command.body, headingLevel: "h2" as const, items: [], mediaId: "" }] : [] };
       next = command.kind === "page"
         ? { ...current, publishing: { ...current.publishing, pages: [...current.publishing.pages, { ...base, navigationLabel: title.slice(0, 40) }] }, ...nextRevision(current) }
-        : { ...current, publishing: { ...current.publishing, posts: [...current.publishing.posts, { ...base, excerpt: "", tags: [] }] }, ...nextRevision(current) };
+        : { ...current, publishing: { ...current.publishing, posts: [...current.publishing.posts, { ...base, excerpt: command.excerpt ?? "", tags: [] }] }, ...nextRevision(current) };
       break;
     }
     case "publishing.update": {

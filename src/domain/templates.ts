@@ -28,7 +28,7 @@ export function getTemplate(id: string) {
   return PORTFOLIO_TEMPLATES.find((template) => template.id === id);
 }
 
-export function buildGuidedDocument(input: { name: string; role: string; intro: string; skills?: string[]; education?: string[]; website?: string; style: "creative" | "technical" | "minimal"; templateId?: TemplateId; projectId?: string; cv?: CvProvenance; interview?: GuidedInterview }): SiteDocument {
+export function buildGuidedDocument(input: { name: string; role: string; intro: string; skills?: string[]; education?: string[]; website?: string; firstProject?: { title: string; summary: string }; style: "creative" | "technical" | "minimal"; templateId?: TemplateId; projectId?: string; cv?: CvProvenance; interview?: GuidedInterview }): SiteDocument {
   const templateId: TemplateId = input.templateId ?? (input.style === "technical" ? "architectural-grid" : input.style === "minimal" ? "editorial-depth" : "cinematic-orbit");
   const template = getTemplate(templateId)!;
   const approved = input.cv?.approvedFacts ?? [];
@@ -57,7 +57,7 @@ export function buildGuidedDocument(input: { name: string; role: string; intro: 
     content: {
       ...template.document.content,
       about: { heading: "About", body: (fact("intro") ?? input.intro).slice(0,900) },
-      experience: [], education, projects: [],
+      experience: [], education, projects: input.firstProject ? [{ id: crypto.randomUUID(), title: input.firstProject.title, summary: input.firstProject.summary, technologies: [], link: "", caseStudySlug: input.firstProject.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0,70) || "first-project", role: "", period: "", challenge: "", approach: "", outcome: "", mediaIds: [] }] : [],
       contact: { ...template.document.content.contact, email: "", location: "", socials: input.website ? [{ id: crypto.randomUUID(), platform: "website", url: input.website }] : [] },
     },
     provenance: input.cv ? { cv: input.cv } : undefined,
