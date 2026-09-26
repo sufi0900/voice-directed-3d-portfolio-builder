@@ -1882,6 +1882,13 @@ body.public-site.light-theme {
 .voice-creation-detail .creation-review-fields label { grid-column:auto; }
 .voice-creation-detail .creation-review-fields [readonly] { opacity:.65;cursor:not-allowed; }
 @media(max-width:960px){.guided-fields.voice-creation-layout{grid-template-columns:1fr}.voice-creation-layout>.vox-interview{position:relative;top:auto;max-height:none}.voice-creation-layout .vox-interview-log{max-height:300px}}
+
+.vox-studio-welcome{position:fixed;inset:0;z-index:150;background:rgba(3,7,18,.86);display:grid;place-items:center;padding:20px;backdrop-filter:blur(10px)}
+.vox-studio-welcome section{position:relative;overflow:hidden;width:min(100%,540px);padding:clamp(24px,4vw,44px);border:1px solid #4f899c;border-radius:24px;background:radial-gradient(circle at 50% 0%,#1b485a 0%,#0b1629 55%,#080e1d 100%);box-shadow:0 30px 100px #0009;color:#f6fbff;text-align:center}
+.vox-studio-welcome h2{font-size:clamp(25px,4vw,38px);line-height:1.12;margin:8px 0 14px}.vox-studio-welcome p{color:#c4d4e5;line-height:1.6}.vox-studio-welcome .eyebrow{color:#84eadd}.vox-studio-welcome small{display:block;margin-top:18px;color:#a9bdd1}.vox-welcome-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:24px}.vox-welcome-actions button{min-height:46px;padding:10px 16px;border-radius:10px;cursor:pointer}
+.vox-celebration{height:90px;position:relative;color:#88f2e4;font-size:32px}.vox-celebration span{position:absolute;top:32px;left:50%;animation:vox-spark 1.8s ease-out both infinite}.vox-celebration span:nth-child(2){--dx:-110px;--dy:-45px;animation-delay:.24s;color:#fb958d}.vox-celebration span:nth-child(3){--dx:92px;--dy:-57px;animation-delay:.43s}.vox-celebration span:nth-child(4){--dx:-53px;--dy:-67px;animation-delay:.69s;color:#e4cd8b}.vox-celebration span:nth-child(5){--dx:44px;--dy:12px;animation-delay:.86s;color:#fa96ca}
+@keyframes vox-spark{0%{transform:translate(-50%,16px) scale(.35);opacity:0}25%{opacity:1}75%{opacity:1}100%{transform:translate(calc(-50% + var(--dx,0px)),var(--dy,-70px)) scale(1);opacity:0}}
+@media(prefers-reduced-motion:reduce){.vox-celebration span{animation:none;opacity:1;transform:translate(calc(-50% + var(--dx,0px)),var(--dy,-35px))}}
 @media(max-width:580px){.voice-creation-detail .template-grid{grid-template-columns:1fr}}
 .vox-save-progress,.voice-saving-status { display:flex;align-items:center;gap:10px;margin:6px 0;padding:12px 14px;border:1px solid #56a7a6;border-radius:10px;background:#0c2b31;color:#dcfffa;font-size:14px;line-height:1.4; }
 .voice-optional-note { margin:0;padding:14px 16px;border-left:3px solid #5bccbd;background:#112632;color:#d9f7f3;line-height:1.55; }

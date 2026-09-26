@@ -28,7 +28,7 @@ const STORAGE_KEY = "voxfolio-demo-document-v1";
 
 type Publication = { slug: string; revision: number; published_at: string; document?: SiteDocument };
 
-export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio", persistence = "local", initialPublication, authenticated = false, userEmail }: { initialDocument?: SiteDocument; projectName?: string; persistence?: "local" | "server"; initialPublication?: Publication; authenticated?: boolean; userEmail?: string }) {
+export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio", persistence = "local", initialPublication, authenticated = false, userEmail, welcomeFromVox = false }: { initialDocument?: SiteDocument; projectName?: string; persistence?: "local" | "server"; initialPublication?: Publication; authenticated?: boolean; userEmail?: string; welcomeFromVox?: boolean }) {
   const [state, dispatch] = useReducer(studioReducer, initialStudioState);
   const hydratedDocument = useRef(initialDocument);
   const { saved, error: saveError, flush, revision: serverRevision, acceptExternal } = useDraftSave(state.present, state.hydrated, persistence === "server", initialDocument?.revision ?? 0);
@@ -53,6 +53,8 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   const [voiceWidth, setVoiceWidth] = useState(320);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [voiceHidden, setVoiceHidden] = useState(false);
+  const [showVoiceWelcome, setShowVoiceWelcome] = useState(welcomeFromVox);
+  const autoWelcomeAttempted = useRef(false);
   const [itemPublishError, setItemPublishError] = useState("");
   const [dismissedError,setDismissedError]=useState("");
   const visibleError=state.lastCommandError || itemPublishError || saveError;
@@ -134,7 +136,25 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     voiceReviewRef.current = null;
     return performPublication(review.selection);
   }
-  const voice = useAssemblyAIAgent({ document: state.present, execute: executeVoice, undo: undoVoice, navigate: navigateFromAssistant, publication: voicePublication });
+  const voice = useAssemblyAIAgent({ document: state.present, execute: executeVoice, undo: undoVoice, navigate: navigateFromAssistant, publication: voicePublication, welcomeToStudio: welcomeFromVox });
+  useEffect(() => {
+    if (!welcomeFromVox || autoWelcomeAttempted.current) return;
+    autoWelcomeAttempted.current = true;
+    // A granted microphone does not guarantee permission to autoplay audio.
+    // Keep the one-click welcome available when the browser declines playback.
+    if (!navigator.permissions?.query) return;
+    void navigator.permissions.query({ name: "microphone" as PermissionName }).then(permission => {
+      const audioPolicy = (navigator as Navigator & { getAutoplayPolicy?: (type: "audiocontext") => string }).getAutoplayPolicy?.("audiocontext");
+      if (permission.state === "granted" && (navigator.userActivation?.isActive || audioPolicy === "allowed")) void voice.start();
+    }).catch(() => undefined);
+  // The welcome only attempts once on arrival, not on every voice status update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [welcomeFromVox]);
+  useEffect(() => {
+    if (!showVoiceWelcome || !["listening", "speaking", "processing"].includes(voice.status)) return;
+    const timer = window.setTimeout(() => setShowVoiceWelcome(false), reducedMotion ? 250 : 1900);
+    return () => window.clearTimeout(timer);
+  }, [showVoiceWelcome, voice.status, reducedMotion]);
   const focusedSkill = useMemo(() => state.present.skills.find((skill) => skill.id === state.present.scene.focusedSkill), [state.present]);
   const portfolioHasUnpublishedChanges = useMemo(() => Boolean(publication && (hasPublicationChanges(state.present, publishedDocument))), [publication, publishedDocument, state.present]);
 
@@ -183,6 +203,7 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
 
   return (
     <main className={`studio studio-workspace ${previewOnly ? "preview-only" : ""} ${editorExpanded ? "editor-expanded" : ""}`}>
+      {showVoiceWelcome && <div className="vox-studio-welcome" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="vox-welcome-title"><div className="vox-celebration" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span><span>✧</span><span>✦</span></div><p className="eyebrow">YOUR PRIVATE DRAFT IS READY</p><h2 id="vox-welcome-title">You made it. Welcome to your Studio!</h2><p>Vox saved your portfolio privately. Explore the editor on the left, your live canvas in the center and your voice assistant on the right. Vox can guide the next step.</p>{voice.error && <p role="alert">{voice.error}</p>}<div className="vox-welcome-actions"><button className="primary-action" type="button" disabled={voice.status === "connecting"} onClick={() => { setVoiceHidden(false); setEditorExpanded(false); if (!voice.active || voice.status === "error") void voice.start(); else setShowVoiceWelcome(false); }}>{voice.status === "connecting" ? "Connecting Vox…" : "Continue with Vox 🎙"}</button><button className="secondary-action" type="button" onClick={() => setShowVoiceWelcome(false)}>Explore Studio</button></div><small>Your site is still private. Publishing publicly is a separate step.</small></section></div>}
       <header className="topbar">
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>VOXFOLIO</strong><small>{projectName}</small></div></div>
         <div className="project-state"><span className={saved ? "saved" : "saving"}><Save size={14} />{saveError || (saved ? persistence === "server" ? "Saved to cloud" : "Saved locally" : "Saving…")}</span><i />Revision {state.present.revision}</div>

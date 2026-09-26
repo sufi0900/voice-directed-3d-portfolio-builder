@@ -3,7 +3,7 @@ import { PortfolioStudio } from "@/features/studio/portfolio-studio";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateSiteDocument } from "@/domain/site-document";
 
-export default async function SavedStudioPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function SavedStudioPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ welcome?: string }> }) {
   const { projectId } = await params;
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -13,5 +13,5 @@ export default async function SavedStudioPage({ params }: { params: Promise<{ pr
   const { data: live } = await supabase.from("project_publications").select("slug,revision,published_at,document").eq("project_id", projectId).is("superseded_at", null).maybeSingle();
   const document = validateSiteDocument(data.document);
   const publication = live ? { ...live, document: validateSiteDocument(live.document) } : undefined;
-  return <PortfolioStudio initialDocument={{ ...document, revision: data.revision }} projectName={data.name} persistence="server" initialPublication={publication} authenticated userEmail={user.email} />;
+  return <PortfolioStudio initialDocument={{ ...document, revision: data.revision }} projectName={data.name} persistence="server" initialPublication={publication} authenticated userEmail={user.email} welcomeFromVox={(await searchParams).welcome === "vox"} />;
 }

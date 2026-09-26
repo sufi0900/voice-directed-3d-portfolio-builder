@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { guidedInterviewSchema } from "./guided-interview";
+import { GUIDED_INTERVIEW_STEPS } from "./guided-interview";
 import { templateOptions } from "./template-contracts";
 
 export const exactFieldSchema = z.enum(["name", "role", "intro", "skills", "education", "website", "projectTitle", "projectSummary"]);
@@ -36,4 +37,13 @@ export function confirmExact(state: VoiceOnboarding, id: string): VoiceOnboardin
 export function isVoiceDraftReady(state: VoiceOnboarding) {
   return Boolean(state.confirmed.name?.trim() && state.confirmed.role?.trim() && state.confirmed.intro?.trim() &&
     guidedInterviewSchema.safeParse(state.direction).success && state.selectedTemplate && !state.pending);
+}
+
+/** The next question is computed from saved facts, including the template choice. */
+export function nextVoiceInterviewStep(state: VoiceOnboarding): string {
+  if (state.pending) return `Confirm the exact ${exactLabels[state.pending.field]}: ${state.pending.value}.`;
+  for (const field of ["name", "role", "intro"] as const) if (!state.confirmed[field]?.trim()) return `Ask for ${exactLabels[field].toLowerCase()}.`;
+  for (const step of GUIDED_INTERVIEW_STEPS) if (!state.direction[step.key]) return step.prompt;
+  if (!state.selectedTemplate) return "Show the template previews and ask the user to choose one.";
+  return "The template is already selected. Mention optional education, skills, website and first project briefly, then invite the user to create the private draft. Do not ask for the template again.";
 }

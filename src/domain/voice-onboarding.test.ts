@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confirmExact, emptyVoiceOnboarding, isVoiceDraftReady, proposeExact } from "./voice-onboarding";
+import { confirmExact, emptyVoiceOnboarding, isVoiceDraftReady, nextVoiceInterviewStep, proposeExact } from "./voice-onboarding";
 import { applySiteCommand } from "./commands";
 import { DEFAULT_SITE_DOCUMENT } from "./site-document";
 
@@ -24,6 +24,7 @@ describe("voice-led creation approval", () => {
     expect(isVoiceDraftReady(draft)).toBe(false);
     draft.selectedTemplate = "cinematic-orbit";
     expect(isVoiceDraftReady(draft)).toBe(true);
+    expect(nextVoiceInterviewStep(draft)).toMatch(/already selected/);
   });
 
   it("rejects unsupported website URLs instead of accepting an ambiguous spoken link", () => {

@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { exactFieldSchema, exactLabels, proposeExact, confirmExact, isVoiceDraftReady, type ExactField, type VoiceOnboarding } from "@/domain/voice-onboarding";
+import { exactFieldSchema, exactLabels, proposeExact, confirmExact, isVoiceDraftReady, nextVoiceInterviewStep, type ExactField, type VoiceOnboarding } from "@/domain/voice-onboarding";
 import { guidedInterviewSchema, GUIDED_INTERVIEW_STEPS } from "@/domain/guided-interview";
 import { PORTFOLIO_TEMPLATES } from "@/domain/templates";
 import { templateOptions } from "@/domain/template-contracts";
-import { appendSpokenWord, isAffirmative } from "@/domain/voice-conversation";
+import { appendSpokenWord, isAffirmative, isDraftCreationIntent } from "@/domain/voice-conversation";
 
 const exactFields = Object.keys(exactLabels) as ExactField[];
 const creationTools = [
@@ -44,11 +44,14 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
   const previousTurn = useRef("");
   const userTurn = useRef(0);
   const proposedOnTurn = useRef(-1);
+  const savingDraft = useRef<Promise<{ok:boolean;error?:string;projectId?:string}> | null>(null);
+  const interrupted = useRef(false);
+  const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest" }); }, [lines, live, spoken]);
   function change(next: VoiceOnboarding) { current.current = next; onChange(next); }
   function prompt(state: VoiceOnboarding) {
-    return `You are Vox, a voice-directed portfolio creator. Ask one question at a time. Exact fields require propose_exact, a spoken read-back, then explicit confirmation on a separate user turn before confirm_exact. The user may also confirm or correct using the visible buttons; when that happens the application tells you the outcome. Never retry an already-confirmed proposal or ask for a fact already confirmed. If the optional first project is declined, call skip_project and continue. Ask for name, role, introduction, then five design choices and a real template; skills, education, website and a first project are optional. When the user explicitly skips optional content, call skip_optional or skip_project. Keep each skill label short (at most 32 characters; at most eight skills) and ask for a correction if the form rejects it; never silently truncate. Present the template previews on the right and explain that the user can choose by mouse or keyboard. After choosing a template, tell them education and website link are optional on the right and they can add them now or later in Studio. If they explicitly ask to proceed or create the private draft, call create_private_draft immediately: this is the ONLY way you can save their project. It creates a PRIVATE draft, never a public site; public publishing happens in Studio later. Report its real success or specific validation failure. Never say you are waiting for a server unless you have actually invoked the tool. Never infer spelling of proper nouns or URLs. Valid design choices: ${JSON.stringify(GUIDED_INTERVIEW_STEPS.map(s=>({key:s.key,values:s.options.map(o=>o.value)})))}. Templates: ${JSON.stringify(PORTFOLIO_TEMPLATES.map(t=>({id:t.id,name:t.name,description:t.description})))}. Current confirmed facts: ${JSON.stringify(state.confirmed)}. Design answers: ${JSON.stringify(state.direction)}. Selected template: ${state.selectedTemplate ?? "none"}. First project skipped: ${!!state.projectSkipped}. Pending exact proposal: ${state.pending ? JSON.stringify({field:state.pending.field,value:state.pending.value,id:state.pending.id}) : "none"}. Respond briefly in English.`;
+    return `You are Vox, a voice-directed portfolio creator. NEXT STEP FROM SAVED STATE: ${nextVoiceInterviewStep(state)}. If a template is already selected, never ask for a template again unless the user requests a change. If the user interrupts your long explanation with "yes, yes, proceed", acknowledge once and move to the next unfinished step. Keep replies under 35 words. Ask one question at a time. Exact fields require propose_exact, a spoken read-back, then explicit confirmation on a separate user turn before confirm_exact. The user may also confirm or correct using the visible buttons; when that happens the application tells you the outcome. Never retry an already-confirmed proposal or ask for a fact already confirmed. If the optional first project is declined, call skip_project and continue. Ask for name, role, introduction, then five design choices and a real template; skills, education, website and a first project are optional. When the user explicitly skips optional content, call skip_optional or skip_project. Keep each skill label short (at most 32 characters; at most eight skills) and ask for a correction if the form rejects it; never silently truncate. Present the template previews on the right and explain that the user can choose by mouse or keyboard. After choosing a template, tell them education and website link are optional on the right and they can add them now or later in Studio. If they explicitly ask to proceed, create a private draft or publish now, call create_private_draft immediately. The application also saves on clear finalization requests, so do not call this action a second time after it succeeds. It creates a PRIVATE draft, never a public site; public publishing happens in Studio later. Report its real success or specific validation failure. Never say you are waiting for a server unless you have actually invoked the tool. Never infer spelling of proper nouns or URLs. Valid design choices: ${JSON.stringify(GUIDED_INTERVIEW_STEPS.map(s=>({key:s.key,values:s.options.map(o=>o.value)})))}. Templates: ${JSON.stringify(PORTFOLIO_TEMPLATES.map(t=>({id:t.id,name:t.name,description:t.description})))}. Current confirmed facts: ${JSON.stringify(state.confirmed)}. Design answers: ${JSON.stringify(state.direction)}. Selected template: ${state.selectedTemplate ?? "none"}. First project skipped: ${!!state.projectSkipped}. Pending exact proposal: ${state.pending ? JSON.stringify({field:state.pending.field,value:state.pending.value,id:state.pending.id}) : "none"}. Respond briefly in English.`;
   }
   function notifyManual(description: string) {
     const ws = socket.current;
@@ -77,6 +80,11 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
   function flushTools() {
     if (!replyDone.current || socket.current?.readyState !== WebSocket.OPEN) return;
     for (const result of toolResults.current.splice(0)) socket.current.send(JSON.stringify({ type: "tool.result", ...result }));
+  }
+  async function saveOnce() {
+    if (savingDraft.current) return savingDraft.current;
+    const task = onCreateDraft(); savingDraft.current = task;
+    try { return await task; } finally { savingDraft.current = null; }
   }
   async function handleTool(item: { name?: string; call_id?: string; arguments?: unknown }) {
     let result: Record<string, unknown>;
@@ -115,8 +123,12 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
         const templateId = templateOptions.find(id => id === args.template_id);
         if (!templateId) throw new Error("Choose a listed portfolio template.");
         const template = PORTFOLIO_TEMPLATES.find(item => item.id === templateId)!;
+        if (current.current.selectedTemplate && current.current.selectedTemplate !== templateId && !/\b(change|switch|choose|select|pick|use|prefer)\b/i.test(previousTurn.current)) {
+          result = { selected: PORTFOLIO_TEMPLATES.find(t => t.id === current.current.selectedTemplate)?.name, already_selected: true, next_step: nextVoiceInterviewStep(current.current) };
+        } else {
         change({ ...current.current, selectedTemplate: templateId });
         result = { selected: template.name, description: template.description, preview_updated: true, next_step: "Tell the user that education, website link, skills and first project are optional on the right. They can add them now or later; if ready, ask them to request their private draft." };
+        }
       } else if (item.name === "skip_project") {
         const confirmed = { ...current.current.confirmed }; delete confirmed.projectTitle; delete confirmed.projectSummary;
         change({ ...current.current, confirmed, pending: current.current.pending?.field === "projectTitle" || current.current.pending?.field === "projectSummary" ? null : current.current.pending, projectSkipped: true });
@@ -130,7 +142,7 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
         if (!isVoiceDraftReady(current.current)) throw new Error("The private draft is not ready. Confirm the required name, role and introduction, all five design choices and a template first.");
         if (!userTurn.current || (!isAffirmative(previousTurn.current) && !/\b(create|save|make|build|prepare|finish|complete|publish|proceed|continue|go ahead|do it)\b/i.test(previousTurn.current)) || /\b(don't|do not|not yet|wait|hold|cancel)\b/i.test(previousTurn.current)) throw new Error("Wait for the user's spoken request to create the private draft.");
         setError("");
-        result = await onCreateDraft();
+        result = await saveOnce();
         if (result.ok) result = { saved: true, private: true, project_id: result.projectId, next_step: "Opening Studio to review the draft. This portfolio has not been published publicly." };
         else result = { error: result.error ?? "Saving failed. Please review the highlighted field on the right." };
       } else throw new Error("Unsupported action.");
@@ -140,12 +152,14 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
     flushTools();
   }
   useEffect(() => () => {
+    if (captionTimer.current) clearTimeout(captionTimer.current);
     socket.current?.close();
     stream.current?.getTracks().forEach((track) => track.stop());
     playbackNodes.current.forEach(node => { try { node.stop(); } catch {} });
     if (context.current && context.current.state !== "closed") void context.current.close();
   }, []);
   function stop() {
+    if (captionTimer.current) clearTimeout(captionTimer.current); captionTimer.current = null;
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "session.end" }));
     socket.current?.close(); socket.current = null;
     stream.current?.getTracks().forEach((track) => track.stop()); stream.current = null;
@@ -172,8 +186,8 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
       ws.addEventListener("open", () => {
         ws.send(JSON.stringify({ type: "session.update", session: {
           system_prompt: prompt(current.current),
-          greeting: current.current.confirmed.name ? `Welcome back. I remember ${current.current.confirmed.name}. I will continue with the next missing interview question and won't ask for details you've already confirmed.` : "Welcome to Voxfolio. I'll repeat exact details so you can check every spelling. What name should your portfolio show?",
-          tools: creationTools, input: { format: { encoding: "audio/pcm" }, language_codes: ["en"], keyterms: current.current.confirmed.name ? [current.current.confirmed.name] : [] }, output: { voice: "ivy", format: { encoding: "audio/pcm" }, volume: 100 },
+          greeting: current.current.confirmed.name ? `Welcome back, ${current.current.confirmed.name}. ${current.current.selectedTemplate ? `Your ${PORTFOLIO_TEMPLATES.find(t=>t.id===current.current.selectedTemplate)?.name ?? "portfolio"} template is already selected. ` : ""}${nextVoiceInterviewStep(current.current)}` : "Welcome to Voxfolio. I'll repeat exact details so you can check every spelling. What name should your portfolio show?",
+          tools: creationTools, input: { format: { encoding: "audio/pcm" }, language_codes: ["en"], keyterms: current.current.confirmed.name ? [current.current.confirmed.name] : [], turn_detection: { min_silence: 1500, max_silence: 4500, interrupt_response: true, interruption_delay: 160 } }, output: { voice: "ivy", format: { encoding: "audio/pcm" }, volume: 100 },
         } })); setBusy(false); setActive(true);
       });
       worklet.port.onmessage = (event) => {
@@ -182,18 +196,24 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
         ws.send(JSON.stringify({ type: "input.audio", audio: btoa(binary) }));
       };
       ws.addEventListener("message", (message) => {
-        const item = JSON.parse(String(message.data)) as { type?: string; text?: string; delta?: string; data?: string; message?: string; name?: string; call_id?: string; arguments?: unknown; status?: string };
+        const item = JSON.parse(String(message.data)) as { type?: string; text?: string; delta?: string; data?: string; message?: string; name?: string; call_id?: string; arguments?: unknown; status?: string; interrupted?: boolean };
         if (item.type === "session.ready") sessionReady.current = true;
-        if (item.type === "input.speech.started") { playbackNodes.current.forEach(node => { try { node.stop(); } catch {} }); playbackNodes.current = []; playbackAt.current = context.current?.currentTime ?? 0; }
+        if (item.type === "input.speech.started") { interrupted.current = true; if (captionTimer.current) clearTimeout(captionTimer.current); captionTimer.current = null; setSpoken(""); playbackNodes.current.forEach(node => { try { node.stop(); } catch {} }); playbackNodes.current = []; playbackAt.current = context.current?.currentTime ?? 0; }
         if (item.type === "transcript.user.delta" && item.text) setLive(item.text);
-        if (item.type === "transcript.user" && item.text) { userTurn.current += 1; previousTurn.current = item.text; setLive(""); setLines((old) => [...old.slice(-30), { who: "you", text: item.text! }]); }
-        if (item.type === "transcript.agent.delta" && item.delta) setSpoken(text=>appendSpokenWord(text,item.delta!));
-        if (item.type === "transcript.agent" && item.text) { setSpoken(""); setLines((old) => [...old.slice(-30), { who: "vox", text: item.text! }]); }
+        if (item.type === "transcript.user" && item.text) { userTurn.current += 1; previousTurn.current = item.text; setLive(""); setLines((old) => [...old.slice(-30), { who: "you", text: item.text! }]); if (isDraftCreationIntent(item.text) && isVoiceDraftReady(current.current)) void saveOnce().then(result => { if (!result.ok) setError(result.error ?? "Could not save the draft."); }); }
+        if (item.type === "transcript.agent.delta" && item.delta && !interrupted.current) setSpoken(text=>appendSpokenWord(text,item.delta!));
+        if (item.type === "transcript.agent" && item.text && !interrupted.current && !item.interrupted) {
+          // The final transcript can arrive before the last PCM chunk has played.
+          const delay = Math.max(0, (playbackAt.current - (context.current?.currentTime ?? 0)) * 1000);
+          if (captionTimer.current) clearTimeout(captionTimer.current);
+          const spokenText = item.text;
+          captionTimer.current = setTimeout(() => { captionTimer.current = null; if (!interrupted.current) { setSpoken(""); setLines(old => [...old.slice(-30), { who: "vox", text: spokenText }]); } }, delay);
+        }
         if (item.type === "tool.call") void handleTool(item);
-        if (item.type === "reply.started") replyDone.current = false;
-        if (item.type === "reply.done") { replyDone.current = true; const hasTools = toolResults.current.length > 0; if (item.status === "interrupted") { playbackNodes.current.forEach(node => { try { node.stop(); } catch {} }); playbackNodes.current = []; playbackAt.current = context.current?.currentTime ?? 0; toolResults.current = []; } else flushTools(); if (pendingNotice.current && !hasTools) announceManual(); }
+        if (item.type === "reply.started") { replyDone.current = false; interrupted.current = false; }
+        if (item.type === "reply.done") { replyDone.current = true; const hasTools = toolResults.current.length > 0; if (item.status === "interrupted") { interrupted.current = true; if (captionTimer.current) clearTimeout(captionTimer.current); captionTimer.current = null; playbackNodes.current.forEach(node => { try { node.stop(); } catch {} }); playbackNodes.current = []; playbackAt.current = context.current?.currentTime ?? 0; setSpoken(""); toolResults.current = []; } else flushTools(); if (pendingNotice.current && !hasTools) announceManual(); }
         if (item.type === "session.error") { stop(); setError(item.message || "Voice stopped. Confirmed answers remain available in this tab."); }
-        if (item.type === "reply.audio" && item.data && context.current) {
+        if (item.type === "reply.audio" && item.data && context.current && !interrupted.current) {
           if (context.current.state === "suspended") void context.current.resume().catch(() => setError("Audio playback was blocked. Check the browser audio permission or output device, then restart Vox."));
           const raw = atob(item.data); const view = new DataView(Uint8Array.from(raw, (ch) => ch.charCodeAt(0)).buffer);
           const buffer = context.current.createBuffer(1, Math.floor(view.byteLength / 2), 24000); const channel = buffer.getChannelData(0);
@@ -209,7 +229,7 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
   }
   return <section className="vox-interview" aria-label="Vox portfolio creation interview">
     <header><p className="eyebrow">BUILD WITH VOX</p><h2>Tell Vox what to build</h2><p>Vox repeats exact information before it enters your portfolio. Confirm the spelling or correct it below.</p></header>
-    <div className="vox-interview-log" role="log" aria-live="polite"><p className="vox"><strong>Vox</strong>What name should your portfolio show?</p>{lines.map((item, index) => <p key={index} className={item.who === "you" ? "user" : "vox"}><strong>{item.who === "you" ? "You" : "Vox"}</strong>{item.text}</p>)}{live && <p className="user"><strong>You · listening</strong>{live}</p>}{spoken && <p className="vox"><strong>Vox · speaking</strong>{spoken}</p>}<div ref={bottom} /></div>
+    <div className="vox-interview-log" role="log" aria-live="polite"><p className="vox"><strong>Vox · progress</strong>{nextVoiceInterviewStep(value)}</p>{lines.map((item, index) => <p key={index} className={item.who === "you" ? "user" : "vox"}><strong>{item.who === "you" ? "You" : "Vox"}</strong>{item.text}</p>)}{live && <p className="user"><strong>You · listening</strong>{live}</p>}{spoken && <p className="vox"><strong>Vox · speaking</strong>{spoken}</p>}<div ref={bottom} /></div>
     {value.pending && <div className="voice-fact-review" role="group" aria-label="Confirm spoken information"><strong>Confirm {exactLabels[value.pending.field]}</strong><p>{value.pending.value}</p><button type="button" onClick={() => { const pending = current.current.pending; if (!pending) return; change(confirmExact(current.current, pending.id)); lastConfirmation.current = pending.id; notifyManual(`The user confirmed ${exactLabels[pending.field]} as ${pending.value} by pressing the confirmation button. This proposal is complete. Continue with the next missing question.`); }}>Yes, this is exact</button><button type="button" onClick={() => { const pending = current.current.pending; if (!pending) return; setExactField(pending.field); setExactText(pending.value); change({ ...current.current, pending: null }); notifyManual(`The user rejected the proposed ${exactLabels[pending.field]} and is correcting it in the text control. Wait for the new proposal and its separate confirmation.`); }}>Correct wording or spelling</button></div>}
     <form className="voice-exact-input" onSubmit={(event) => { event.preventDefault(); try { const next = proposeExact(current.current, exactField, exactText); change(next); proposedOnTurn.current = userTurn.current; notifyManual(`The user typed a corrected proposal for ${exactLabels[exactField]}: ${next.pending?.value}. Read this exact value back and request separate confirmation. Its proposal ID is ${next.pending?.id}.`); setExactText(""); setError(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Review the value."); } }}><label>Correct an exact detail<select value={exactField} onChange={event=>setExactField(exactFieldSchema.parse(event.target.value))}>{exactFields.map(item=><option key={item} value={item}>{exactLabels[item]}</option>)}</select></label><input aria-label={`Propose ${exactLabels[exactField]}`} value={exactText} onChange={event=>setExactText(event.target.value)} placeholder="Type or paste exact spelling" /><button type="submit" disabled={!exactText.trim()}>Review value</button></form>
     {saving && <div className="vox-save-progress" role="status"><span className="inline-spinner" /> Saving your private portfolio draft… Vox will report the result after the server responds.</div>}
