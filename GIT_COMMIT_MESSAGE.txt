@@ -1,1 +1,1 @@
-feat(voxfolio): add v23 selective opportunity source review
+feat(templates): add V25 portfolio collection and portrait-aware studio

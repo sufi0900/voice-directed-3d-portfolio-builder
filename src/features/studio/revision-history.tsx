@@ -10,7 +10,7 @@ type Revision = {
   summary: { name: string; role: string; accent: string; background: string; alignment: string; preset: string; motion: string; skills: number };
 };
 
-const accentColor: Record<string, string> = { cyan: "#4deeea", violet: "#a78bfa", coral: "#fb7185", lime: "#a3e635" };
+const accentColor: Record<string, string> = { cyan: "#4deeea", violet: "#a78bfa", coral: "#fb7185", lime: "#a3e635", rose: "#d94c89", blue: "#75aaff", olive: "#78834b" };
 
 export function RevisionHistory({ projectId, currentRevision, onClose, onRestored }: { projectId: string; currentRevision: number; onClose: () => void; onRestored: () => void }) {
   const [revisions, setRevisions] = useState<Revision[]>([]);

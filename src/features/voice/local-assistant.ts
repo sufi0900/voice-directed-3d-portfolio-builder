@@ -1,3 +1,4 @@
+import { TEMPLATE_CONTRACTS } from "@/domain/template-contracts";
 export type AssistantCall = { name: string; arguments: Record<string, unknown> };
 export type AssistantPlan = { reply: string; calls: AssistantCall[]; source: "local" | "ai"; degraded?: boolean; code?: string };
 
@@ -28,6 +29,10 @@ export function planLocalAssistant(message: string): AssistantPlan | null {
   if (/^(?:please\s+)?undo(?:\s+(?:that|the last change))?[.!]?$/i.test(value)) {
     return { source: "local", reply: "I undid the previous change.", calls: [{ name: "undo_last_change", arguments: {} }] };
   }
+
+  const template = TEMPLATE_CONTRACTS.find((item) => value.toLowerCase().includes(item.name.toLowerCase()) || value.toLowerCase().includes(item.id));
+  if (template && /\b(use|switch|apply|choose|select|change)\b/i.test(value)) return { source: "local", reply: `Applying ${template.name}. Your content is preserved.`, calls: [{ name: "set_portfolio_template", arguments: { template: template.id } }] };
+  if (/\b(upload|add|replace|change)\b/i.test(value) && /\b(portrait|headshot|profile (?:photo|image)|hero (?:photo|image))\b/i.test(value)) return { source: "local", reply: "Opening your profile photo controls in About. Choose Upload image to select a file. Your portrait is shared with portrait-based hero layouts.", calls: [{ name: "navigate_to", arguments: { destination: "about" } }] };
 
   if (navigationIntent.test(value)) {
     const target = destinations.find((candidate) => candidate.patterns.some((pattern) => pattern.test(value)));

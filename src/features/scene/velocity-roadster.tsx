@@ -8,7 +8,7 @@ import type { SiteDocument } from "@/domain/site-document";
 import { VelocityWorld } from "./velocity/velocity-stage";
 
 /** Paint per accent: deep, saturated metallics that stay rich against the graphite showroom. */
-const paint = { cyan: "#0a8f9e", violet: "#5a3fd1", coral: "#c9271b", lime: "#86ad1c" } as const;
+const paint = { cyan: "#0a8f9e", violet: "#5a3fd1", coral: "#c9271b", lime: "#86ad1c", rose: "#d94c89", blue: "#75aaff", olive: "#78834b" } as const;
 type Props = { document: SiteDocument; execute: (command: SiteCommand) => void; reducedMotion: boolean };
 
 class SceneBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {

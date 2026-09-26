@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { isCollectionTemplate } from "@/domain/template-contracts";
+import { CollectionPortrait, CollectionSections } from "@/features/portfolio/collection-templates";
 import { PORTFOLIO_TEMPLATES } from "@/domain/templates";
 import type { CvCandidate } from "@/domain/cv-ingestion";
 import type { GuidedInterview } from "@/domain/guided-interview";
@@ -124,6 +126,7 @@ export function CreationFlow({ authenticated, suggestedName = "" }: { authentica
 
 function TemplatePreview({ template }: { template: (typeof PORTFOLIO_TEMPLATES)[number] }) {
   const document = template.document;
+  if (isCollectionTemplate(template.id)) return <aside className={`template-library-preview template-${template.id} collection-theme`} data-accent={document.design.accent} aria-live="polite"><header><strong>{template.name}</strong><span>Scroll to explore</span></header><div className={`portfolio-preview template-${template.id} collection-theme collection-library-canvas`} data-accent={document.design.accent}><section className="portfolio-hero"><div className="portfolio-copy"><p className="kicker">YOUR NEXT CHAPTER</p><h2>{document.identity.name}</h2><h3>{document.identity.role}</h3><p className="intro">{document.identity.intro}</p></div><CollectionPortrait document={document} /></section><CollectionSections document={document} editing /></div></aside>;
   return <aside className={`template-library-preview template-${template.id}`} data-accent={document.design.accent} aria-live="polite">
     <header><div><span>SELECTED TEMPLATE</span><strong>{template.name}</strong></div><em>Responsive preview</em></header>
     <div className="template-preview-viewport">

@@ -1,6 +1,7 @@
 import type { SiteDocument } from "./site-document";
 
-export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier", "professional-2d"] as const;
+import { templateOptions } from "./site-document";
+export { templateOptions };
 export type TemplateId = typeof templateOptions[number];
 
 export type TemplateContract = {
@@ -62,6 +63,9 @@ export const TEMPLATE_CONTRACTS: readonly TemplateContract[] = [
     audience: "Corporate professionals, academics, and minimalists",
     presentation: { accent: "violet", background: "ivory", heroAlignment: "center", sceneFamily: "professional-2d", scenePreset: "minimal", motion: "still", intensity: 0.4 },
   },
+  { id: "rose-studio", name: "Rose Studio", description: "Blush paper, sculptural portrait framing and an expressive serif portfolio with a visual project gallery.", audience: "Designers, creators and independent studios", presentation: { accent: "rose", background: "ivory", heroAlignment: "left", sceneFamily: "professional-2d", scenePreset: "minimal", motion: "still", intensity: .4 } },
+  { id: "midnight-bento", name: "Midnight Bento", description: "A midnight-blue modular dashboard with a profile card, compact skill tiles and a responsive work grid.", audience: "Developers, product builders and digital creators", presentation: { accent: "blue", background: "ink", heroAlignment: "left", sceneFamily: "professional-2d", scenePreset: "minimal", motion: "still", intensity: .4 } },
+  { id: "olive-journal", name: "Olive Journal", description: "Warm paper and olive ink, a journal-style masthead, indexed career entries and generous editorial project rows.", audience: "Writers, researchers and creative professionals", presentation: { accent: "olive", background: "ivory", heroAlignment: "left", sceneFamily: "professional-2d", scenePreset: "minimal", motion: "still", intensity: .4 } },
 ] as const;
 
 export function getTemplateContract(id: TemplateId) {
@@ -76,3 +80,7 @@ export function applyTemplatePresentation(document: SiteDocument, id: TemplateId
     scene: { ...document.scene, family: presentation.sceneFamily, preset: presentation.scenePreset, motion: presentation.motion, intensity: presentation.intensity, focusedSkill: id === "velocity-atelier" ? null : document.scene.focusedSkill },
   };
 }
+
+export function isFlatTemplate(id: string) { return ["professional-2d", "rose-studio", "midnight-bento", "olive-journal"].includes(id); }
+export function isCollectionTemplate(id: string) { return ["rose-studio", "midnight-bento", "olive-journal"].includes(id); }
+export function isLightTemplate(id: string) { return ["professional-2d", "rose-studio", "olive-journal"].includes(id); }

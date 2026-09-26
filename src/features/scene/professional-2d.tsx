@@ -5,7 +5,7 @@ import { Component, type ReactNode, type ErrorInfo } from "react";
 import type { SiteCommand } from "@/domain/commands";
 import type { SiteDocument } from "@/domain/site-document";
 
-const accents = { cyan: "#06b6d4", violet: "#8b5cf6", coral: "#f97316", lime: "#84cc16" } as const;
+const accents = { cyan: "#06b6d4", violet: "#8b5cf6", coral: "#f97316", lime: "#84cc16", rose: "#d94c89", blue: "#75aaff", olive: "#78834b" } as const;
 
 type Props = { document: SiteDocument; execute: (command: SiteCommand) => void; reducedMotion: boolean };
 

@@ -7,7 +7,7 @@ import * as THREE from "three";
 import type { SiteCommand } from "@/domain/commands";
 import type { SiteDocument } from "@/domain/site-document";
 
-const accents = { cyan: "#4deeea", violet: "#a78bfa", coral: "#fb7185", lime: "#a3e635" } as const;
+const accents = { cyan: "#4deeea", violet: "#a78bfa", coral: "#fb7185", lime: "#a3e635", rose: "#d94c89", blue: "#75aaff", olive: "#78834b" } as const;
 const scenePalettes = {
   cosmic: { core: "#6ee7ff", secondary: "#8b5cf6", metalness: 0.45 },
   architect: { core: "#f8fafc", secondary: "#38bdf8", metalness: 0.8 },

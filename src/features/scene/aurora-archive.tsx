@@ -7,7 +7,7 @@ import * as THREE from "three";
 import type { SiteCommand } from "@/domain/commands";
 import type { SiteDocument } from "@/domain/site-document";
 
-const accents = { cyan: "#4deeea", violet: "#a78bfa", coral: "#fb7185", lime: "#a3e635" } as const;
+const accents = { cyan: "#4deeea", violet: "#a78bfa", coral: "#fb7185", lime: "#a3e635", rose: "#d94c89", blue: "#75aaff", olive: "#78834b" } as const;
 type Props = { document: SiteDocument; execute: (command: SiteCommand) => void; reducedMotion: boolean };
 
 function ArchiveRecord({ skill, index, accent, selected, execute }: { skill: SiteDocument["skills"][number]; index: number; accent: string; selected: boolean; execute: Props["execute"] }) {

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { siteDocumentSchema, type SiteDocument } from "@/domain/site-document";
 
 const STORAGE_KEY = "voxfolio-demo-document-v1";
-const accents = { cyan: "#4deeea", violet: "#a78bfa", coral: "#fb7185", lime: "#a3e635" };
+const accents = { cyan: "#4deeea", violet: "#a78bfa", coral: "#fb7185", lime: "#a3e635", rose: "#d94c89", blue: "#75aaff", olive: "#78834b" };
 
 export function ClaimDemo({ email }: { email: string }) {
   const router = useRouter();

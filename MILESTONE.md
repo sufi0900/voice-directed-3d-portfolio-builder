@@ -1,3 +1,7 @@
+# Current release: V25 — Portfolio Collection
+
+Three new template layouts, shared portraits and template-aware Studio guidance. See RELEASE_V25.md for validation and manual acceptance checks.
+
 # V23.2 — Template color consistency
 
 This cumulative release includes V23.1 and restores per-template accent colors in the Studio canvas and published portfolio. Architectural Grid uses violet, Velocity Atelier uses warm coral, and the other templates retain their selected palette. Studio controls and the Voice Assistant keep their dark appearance. The same accents now reach dedicated About, Blog, Projects, and case study pages. No new SQL is required.

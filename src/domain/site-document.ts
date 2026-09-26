@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-export const accentOptions = ["cyan", "violet", "coral", "lime"] as const;
+export const accentOptions = ["cyan", "violet", "coral", "lime", "rose", "blue", "olive"] as const;
 export const backgroundOptions = ["midnight", "ink", "plum", "cloud", "ivory"] as const;
 export const alignmentOptions = ["left", "center", "right"] as const;
 export const scenePresetOptions = ["cosmic", "architect", "minimal"] as const;
 export const motionOptions = ["calm", "dynamic", "still"] as const;
-export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier", "professional-2d"] as const;
+export const templateOptions = ["cinematic-orbit", "architectural-grid", "editorial-depth", "kinetic-gallery", "velocity-atelier", "professional-2d", "rose-studio", "midnight-bento", "olive-journal"] as const;
 export const sceneFamilyOptions = ["orbital-showcase", "constellation-field", "kinetic-gallery", "velocity-roadster", "professional-2d"] as const;
 export const cvFactKindOptions = ["name", "role", "intro", "skill", "education", "experience"] as const;
 export const portfolioSectionOptions = ["about", "experience", "skills", "projects", "contact"] as const;

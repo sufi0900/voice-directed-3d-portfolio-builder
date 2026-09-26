@@ -1,3 +1,5 @@
+import { isCollectionTemplate } from "@/domain/template-contracts";
+import { CollectionSections } from "./collection-templates";
 import { ArrowUpRight, Globe2, Mail, MapPin } from "lucide-react";
 import Image from "next/image";
 import type { PortfolioSection, SiteDocument } from "@/domain/site-document";
@@ -26,6 +28,7 @@ export function PortfolioNavigation({ document, publicBasePath, onNavigateSectio
 }
 
 export function PortfolioSections({ document, editing = false, publicBasePath, onOpenPage }: { document: SiteDocument; editing?: boolean; publicBasePath?: string; onOpenPage?: (pageId: string) => void }) {
+  if (isCollectionTemplate(document.design.template)) return <CollectionSections document={document} editing={editing} publicBasePath={publicBasePath} onOpenPage={onOpenPage} />;
   if (document.design.template === "professional-2d") return <ProfessionalPortfolioSections document={document} editing={editing} publicBasePath={publicBasePath} onOpenPage={onOpenPage} />;
   const cinematic = isCinematicTemplate(document.design.template);
   return <CinemaRoot enabled={cinematic} template={document.design.template} motion={document.scene.motion} intensity={document.scene.intensity}>
@@ -52,7 +55,7 @@ function Section({ section, document, editing, cinematic, publicBasePath, onOpen
       return <section id="projects" className="portfolio-section"><SectionHeading eyebrow="SELECTED WORK" title="Projects" kind="projects" cinematic={cinematic} template={document.design.template} />{projects.length ? <><div className="work-grid">{projects.map((project, index) => { const cover = document.media.assets.find((asset) => project.mediaIds.includes(asset.id)); const caseStudyHref = publicBasePath && project.caseStudySlug ? `${publicBasePath}/projects/${project.caseStudySlug}` : ""; return <article key={project.id} className={cover ? "has-project-cover" : ""}>{cover && <div className="project-card-cover"><Image src={cover.url} alt={cover.alt} fill sizes="(max-width: 780px) 90vw, 420px" unoptimized /></div>}<span>0{index + 1}</span><h3>{project.title}</h3><p>{project.summary}</p><div className="technology-list">{project.technologies.map((technology) => <em key={technology}>{technology}</em>)}</div><div className="project-links">{caseStudyHref && <a href={caseStudyHref}>Read case study <ArrowUpRight size={15} /></a>}{project.link && <a href={project.link} target="_blank" rel="noreferrer">Visit project <ArrowUpRight size={15} /></a>}</div></article>; })}</div>{publicBasePath && selectedProjects.length > 0 && <a className="section-detail-link" href={`${publicBasePath}/projects`}>View all projects <ArrowUpRight size={15} /></a>}</> : <EmptyState label="Add selected work in Content → Projects." />}</section>;
   }
   const contact = document.content.contact;
-  if (!contact.email && !contact.location && !editing) return null;
+  if (!contact.email && !contact.location && !contact.socials.length && !editing) return null;
   return <section id="contact" className="portfolio-section contact-section">{cinematic && <SectionScene kind="contact" template={document.design.template} />}<p className="section-eyebrow">CONTACT</p><h2>{contact.heading}</h2><div>{contact.email ? <a className="contact-cta" href={`mailto:${contact.email}`}><Mail size={17} />{contact.cta}</a> : editing ? <span className="contact-cta disabled"><Mail size={17} />Add an email to activate</span> : null}{contact.location && <span className="contact-location"><MapPin size={16} />{contact.location}</span>}</div>{contact.socials.length > 0 && <nav className="social-links" aria-label="Social profiles">{contact.socials.map((item) => <a key={item.id} href={item.url} target="_blank" rel="noreferrer" aria-label={socialLabels[item.platform]} title={socialLabels[item.platform]}><SocialIcon platform={item.platform} /></a>)}</nav>}</section>;
 }
 

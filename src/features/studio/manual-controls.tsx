@@ -4,10 +4,10 @@ import { ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, Plus, Share2, Trash2 } f
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import type { SiteCommand } from "@/domain/commands";
-import { socialPlatformOptions, type PortfolioSection, type SiteDocument } from "@/domain/site-document";
+import { accentOptions, socialPlatformOptions, type PortfolioSection, type SiteDocument } from "@/domain/site-document";
 import { PublishingEditor } from "./publishing-editor";
 import { deriveImageAlt } from "@/domain/media";
-import { TEMPLATE_CONTRACTS } from "@/domain/template-contracts";
+import { TEMPLATE_CONTRACTS, getTemplateContract, isFlatTemplate } from "@/domain/template-contracts";
 import { reviewOpportunity } from "@/domain/opportunity-review";
 import { OpportunityPlanner } from "./opportunity-planner";
 import { OpportunitySourceReview } from "./opportunity-source-review";
@@ -19,6 +19,8 @@ export type PreviewTarget = { section: string; itemId?: string };
 type Props = { document: SiteDocument; publishedDocument?: SiteDocument; execute: (command: SiteCommand) => void; panel: "content" | "design" | "scene" | "opportunity"; canUploadMedia?: boolean; previewTarget?: PreviewTarget; onPreviewTarget?: (target: PreviewTarget) => void; onPublishItem?: (kind: "page" | "post", itemId: string, status: "draft" | "published") => void; publishingItemId?: string; itemPublishError?: string; canDirectPublish?: boolean };
 
 export function ManualControls({ document, publishedDocument, execute, panel, canUploadMedia = false, previewTarget, onPreviewTarget, onPublishItem, publishingItemId = "", itemPublishError = "", canDirectPublish = false }: Props) {
+  const activeTemplate = getTemplateContract(document.design.template);
+  const flat = isFlatTemplate(document.design.template);
   const [newSkill, setNewSkill] = useState("");
   const contentDestinations = ["hero", "about", "experience", "education", "skills", "projects", "site pages", "blog posts", "contact", "page structure", "media library"];
   const contentSection = previewTarget?.section ?? "hero";
@@ -39,8 +41,10 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
   if (panel === "content") return (
     <div className="control-stack">
       <nav className="studio-section-nav" aria-label="Edit portfolio content">{contentDestinations.map((destination) => <button type="button" key={destination} className={contentSection === destination ? "active" : ""} aria-current={contentSection === destination ? "page" : undefined} onClick={() => selectContentSection(destination)}>{destination}</button>)}</nav>
+      <section className="template-editing-guide"><strong>{activeTemplate.name}</strong><p>{activeTemplate.description}</p>{flat && <small>One shared profile photo appears in the hero. Add project cover images for a complete visual portfolio.</small>}</section>
       <Select label="Editing" value={contentSection} options={contentDestinations} onChange={selectContentSection} />
       {contentSection === "hero" && <>
+        {flat && <HeadshotUploader document={document} execute={execute} enabled={canUploadMedia} />}
         <BufferedField label="Name" value={document.identity.name} maxLength={60} onCommit={(value) => execute({ type: "identity.set", field: "name", value })} />
         <BufferedField label="Professional role" value={document.identity.role} maxLength={80} onCommit={(value) => execute({ type: "identity.set", field: "role", value })} />
         <BufferedField label="Introduction" value={document.identity.intro} maxLength={220} multiline onCommit={(value) => execute({ type: "identity.set", field: "intro", value })} />
@@ -61,7 +65,7 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
       </article>)}</section>}
       {contentSection === "skills" &&
       <section className="skill-editor" aria-labelledby="skill-editor-title">
-        <div className="skill-editor-heading"><div><strong id="skill-editor-title">Featured skills</strong><small>Shown as interactive nodes in the 3D scene.</small></div><span>{document.skills.length}/8</span></div>
+        <div className="skill-editor-heading"><div><strong id="skill-editor-title">Featured skills</strong><small>{flat ? "Shown in your template’s capability layout." : "Shown as interactive nodes in the 3D scene."}</small></div><span>{document.skills.length}/8</span></div>
         <div className="skill-list">
           {document.skills.map((skill) => <div className="skill-row" key={skill.id}>
             <BufferedInput ariaLabel={`Edit ${skill.label}`} value={skill.label} maxLength={32} onCommit={(label) => execute({ type: "skill.update", skillId: skill.id, label })} />
@@ -110,12 +114,14 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
   if (panel === "design") return (
     <div className="control-stack">
       <section className="studio-template-picker" aria-labelledby="template-picker-title"><header><strong id="template-picker-title">Portfolio template</strong><small>Switch presentation without replacing any content.</small></header><div>{TEMPLATE_CONTRACTS.map((template) => <button type="button" key={template.id} className={document.design.template === template.id ? "selected" : ""} aria-pressed={document.design.template === template.id} onClick={() => execute({ type: "design.setTemplate", value: template.id })}><i aria-hidden="true" /><span><strong>{template.name}</strong><small>{template.description}</small></span></button>)}</div></section>
-      <Select label="Accent" value={document.design.accent} options={["cyan", "violet", "coral", "lime"]} onChange={(value) => execute({ type: "design.setAccent", value: value as never })} />
-      <Select label="Background" value={document.design.background} options={["midnight", "ink", "plum", "cloud", "ivory"]} onChange={(value) => execute({ type: "design.setBackground", value: value as never })} />
-      <Select label="Hero alignment" value={document.design.heroAlignment} options={["left", "center", "right"]} onChange={(value) => execute({ type: "design.setHeroAlignment", value: value as never })} />
+      <Select label="Accent" value={document.design.accent} options={[...accentOptions]} onChange={(value) => execute({ type: "design.setAccent", value: value as never })} />
+      {!flat && <Select label="Background" value={document.design.background} options={["midnight", "ink", "plum", "cloud", "ivory"]} onChange={(value) => execute({ type: "design.setBackground", value: value as never })} />}
+      {!flat && <Select label="Hero alignment" value={document.design.heroAlignment} options={["left", "center", "right"]} onChange={(value) => execute({ type: "design.setHeroAlignment", value: value as never })} />}
       <p className="guardrail-note">Only approved design tokens are exposed, so contrast, spacing and hierarchy remain stable.</p>
     </div>
   );
+
+  if (flat) return <div className="control-stack"><section className="template-editing-guide"><h3>{activeTemplate.name}</h3><p>This template uses a portrait and responsive typography. Edit your photo under Content → Hero, and use Design to change the accent.</p><p>Choose a cinematic template to configure an interactive 3D scene.</p></section></div>;
 
   return (
     <div className="control-stack">
@@ -207,7 +213,7 @@ function HeadshotUploader({ document, execute, enabled }: { document: SiteDocume
     } catch { setError("The headshot upload was interrupted."); }
     finally { setBusy(false); }
   }
-  return <section className="headshot-editor"><div className="headshot-preview">{document.media.headshotUrl ? <Image src={document.media.headshotUrl} alt={document.media.headshotAlt || `${document.identity.name} headshot`} fill sizes="88px" unoptimized /> : <span>{initials(document.identity.name)}</span>}</div><div><strong>About headshot</strong><small>JPG, PNG, or WebP · maximum 3 MB</small>{enabled ? <label className="headshot-upload"><input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} />{busy ? "Uploading…" : document.media.headshotUrl ? "Replace image" : "Upload image"}</label> : <small>Save this portfolio to your account before uploading media.</small>}{document.media.headshotUrl && <button type="button" onClick={() => execute({ type: "media.setHeadshot", url: "", alt: "" })}>Remove</button>}{error && <em>{error}</em>}</div></section>;
+  return <section className="headshot-editor"><div className="headshot-preview">{document.media.headshotUrl ? <Image src={document.media.headshotUrl} alt={document.media.headshotAlt || `${document.identity.name} headshot`} fill sizes="(max-width: 700px) 130px, 320px" unoptimized /> : <span>{initials(document.identity.name)}</span>}</div><div><strong>Profile portrait</strong><small>JPG, PNG, or WebP · maximum 3 MB</small>{enabled ? <label className="headshot-upload"><input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} />{busy ? "Uploading…" : document.media.headshotUrl ? "Replace image" : "Upload image"}</label> : <small>Save this portfolio to your account before uploading media.</small>}{document.media.headshotUrl && <><BufferedField label="Portrait alternative text" value={document.media.headshotAlt} maxLength={160} allowEmpty onCommit={(alt) => execute({ type: "media.setHeadshot", url: document.media.headshotUrl, alt })} /><button type="button" onClick={() => execute({ type: "media.setHeadshot", url: "", alt: "" })}>Remove</button></>}{error && <em>{error}</em>}</div></section>;
 }
 
 function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "VF"; }
