@@ -1,1 +1,1 @@
-feat(templates): add V25 portfolio collection and portrait-aware studio
+fix(templates): differentiate V25 hero and section layouts

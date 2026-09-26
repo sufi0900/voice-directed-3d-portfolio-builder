@@ -5,7 +5,7 @@ import { DEFAULT_SITE_DOCUMENT, validateSiteDocument } from "@/domain/site-docum
 import { applySiteCommand } from "@/domain/commands";
 import { applyTemplatePresentation } from "@/domain/template-contracts";
 import { planLocalAssistant } from "@/features/voice/local-assistant";
-import { CollectionPortrait, CollectionSections } from "./collection-templates";
+import { CollectionHero, CollectionPortrait, CollectionSections } from "./collection-templates";
 beforeAll(() => { (globalThis as { React?: typeof React }).React = React; });
 describe("new template contracts", () => {
   for (const id of ["rose-studio", "midnight-bento", "olive-journal"] as const) {
@@ -24,6 +24,20 @@ describe("new template contracts", () => {
       expect(planLocalAssistant(`Switch to ${id}`)?.calls[0]).toEqual({name:"set_portfolio_template",arguments:{template:id}});
     });
   }
+  it("renders separate hero compositions from the same identity on public and preview surfaces", () => {
+    const heroClasses = ["collection-hero-rose", "collection-hero-bento", "collection-hero-journal"];
+    for (const [index, id] of (["rose-studio", "midnight-bento", "olive-journal"] as const).entries()) {
+      const document = applyTemplatePresentation(DEFAULT_SITE_DOCUMENT, id);
+      const published = renderToStaticMarkup(<CollectionHero document={document} publicBasePath="/p/example" />);
+      const preview = renderToStaticMarkup(<CollectionHero document={document} />);
+      expect(published).toContain(heroClasses[index]);
+      expect(preview).toContain(heroClasses[index]);
+      expect(published.match(/<h1>/g)).toHaveLength(1);
+      expect(preview).not.toContain("<h1>");
+      expect(published).toContain(document.identity.name);
+      expect(published).toContain(document.identity.intro);
+    }
+  });
   it("honours hidden sections and never adds owner facts", () => {
     const document=applyTemplatePresentation(DEFAULT_SITE_DOCUMENT,"rose-studio");
     document.content={...document.content,visibility:{...document.content.visibility,about:false}};

@@ -6,7 +6,7 @@ import { PortfolioNavigation, PortfolioSections } from "@/features/portfolio/por
 import { SceneRenderer } from "@/features/scene/scene-renderer";
 import { ShareFeedbackWidget } from "./share-feedback-widget";
 import { isFlatTemplate, isCollectionTemplate } from "@/domain/template-contracts";
-import { CollectionPortrait } from "@/features/portfolio/collection-templates";
+import { CollectionHero } from "@/features/portfolio/collection-templates";
 import { ProfessionalHeroAside } from "@/features/portfolio/professional-hero-aside";
 import { VisitorVox } from "./visitor-vox";
 const backgroundClass = { midnight: "bg-midnight", ink: "bg-ink", plum: "bg-plum", cloud: "bg-cloud", ivory: "bg-ivory" } as const;
@@ -32,7 +32,7 @@ export function PublicPortfolio({
   return <main className={`studio public-site template-${document.design.template} ${isCollectionTemplate(document.design.template) ? "collection-theme" : ""} ${backgroundClass[document.design.background]} ${isLightTheme ? "light-theme" : ""}`} data-accent={document.design.accent}>
     <header className="public-nav"><a className="public-identity" href="#"><i>{initials}</i><strong>{document.identity.name}</strong></a><PortfolioNavigation document={document} publicBasePath={path} />{document.content.contact.email ? <a className="public-contact-link" href="#contact">Contact</a> : <span />}</header>
     <div className="portfolio-preview" aria-label={`${document.identity.name}'s portfolio`}>
-      <section className={`portfolio-hero align-${document.design.heroAlignment}`}>
+      {isCollectionTemplate(document.design.template) ? <CollectionHero document={document} publicBasePath={path} /> : <section className={`portfolio-hero align-${document.design.heroAlignment}`}>
         <div className="ambient-grid" />
         <div className="portfolio-copy">
         <p className="availability"><i />{document.identity.availability}</p>
@@ -43,9 +43,9 @@ export function PublicPortfolio({
         <div className="hero-actions"><a href={`${path}/projects`}>View selected work</a><a className="ghost" href="#contact">Start a conversation</a></div>
         {focusedSkill && <div className="focus-card"><span>FEATURED CAPABILITY</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}
         </div>
-        {document.design.template === "professional-2d" && <ProfessionalHeroAside document={document} />}{isCollectionTemplate(document.design.template) && <CollectionPortrait document={document} />}
+        {document.design.template === "professional-2d" && <ProfessionalHeroAside document={document} />}
         {!isFlatTemplate(document.design.template) && <div className="scene-stage"><SceneRenderer document={document} execute={() => undefined} reducedMotion={reducedMotion} /></div>}
-      </section>
+      </section>}
       <PortfolioSections document={document} publicBasePath={path} />
     </div>
     <footer className="public-footer"><span>Built with Voxfolio</span><small>Published revision {document.revision}</small></footer>
