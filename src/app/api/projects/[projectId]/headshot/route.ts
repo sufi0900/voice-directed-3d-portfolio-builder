@@ -26,8 +26,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
   if (file.size < 1 || file.size > MAX_BYTES) return NextResponse.json({ error: "The image must be smaller than 3 MB." }, { status: 413 });
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!signatureMatches(file.type, bytes)) return NextResponse.json({ error: "The file content does not match its image type." }, { status: 415 });
-  const path = `${user.id}/${projectId}/headshot.${extension}`;
-  const { error } = await supabase.storage.from("portfolio-media").upload(path, bytes, { contentType: file.type, cacheControl: "3600", upsert: true });
+  const path = `${user.id}/${projectId}/headshot-${crypto.randomUUID()}.${extension}`;
+  const { error } = await supabase.storage.from("portfolio-media").upload(path, bytes, { contentType: file.type, cacheControl: "3600", upsert: false });
   if (error) {
     const blocked = /row-level security|permission|policy/i.test(error.message);
     return NextResponse.json({ error: blocked ? "Supabase blocked the upload. Run migration 005_fix_portfolio_media_policies.sql, then sign out and back in." : error.message }, { status: blocked ? 403 : 500 });

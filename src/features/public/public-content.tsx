@@ -1,3 +1,5 @@
+import { RichDocumentView } from "@/features/content/rich-document-view";
+import type { RichNode } from "@/domain/rich-document";
 import { isCollectionTemplate } from "@/domain/template-contracts";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import Image from "next/image";
@@ -17,7 +19,7 @@ export function PublicContentPage({ document, portfolioSlug, item, kind, basePat
     <article className="published-content-shell"><CinematicBackdrop variant="portal" />
       <header className="published-content-hero"><p className="section-eyebrow">{kind === "post" ? "JOURNAL" : "PAGE"}</p><h1>{item.title}</h1>{kind === "post" && "excerpt" in item && item.excerpt && <p>{item.excerpt}</p>}{kind === "post" && "tags" in item && item.tags.length > 0 && <div>{item.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}</header>
       {cover && <figure className="published-content-cover"><Image src={cover.url} alt={cover.alt} fill sizes="(max-width: 900px) 94vw, 1040px" priority unoptimized /></figure>}
-      <StructuredContent document={document} blocks={item.blocks} />
+      <StructuredContent document={document} blocks={item.blocks} richContent={item.richContent} />
       <footer className="published-content-footer"><a href={kind === "post" ? `${path}/blog` : path}><ArrowLeft size={16} />{kind === "post" ? "Back to the journal" : "Back to portfolio"}</a></footer>
     </article>
   </main>;
@@ -29,7 +31,8 @@ export function PublicBlogIndex({ document, portfolioSlug, basePath }: { documen
   return <main className={`published-content-page bg-${document.design.background} template-${document.design.template} ${isCollectionTemplate(document.design.template) ? "collection-theme" : ""} ${document.design.template === "professional-2d" ? "light-theme" : ""}`} data-accent={document.design.accent}><ContentNav document={document} basePath={path} /><section className="blog-index"><header><p className="section-eyebrow">JOURNAL</p><h1>Ideas, process and field notes</h1><p>Published by {document.identity.name}</p></header><div>{posts.map((post) => { const cover = document.media.assets.find((asset) => asset.id === post.coverMediaId); return <article key={post.id}>{cover && <div className="blog-card-cover"><Image src={cover.url} alt={cover.alt} fill sizes="(max-width: 760px) 94vw, 430px" unoptimized /></div>}<div><span>{post.publishedAt ? new Date(post.publishedAt).toLocaleDateString("en", { year: "numeric", month: "short", day: "numeric" }) : "Published"}</span><h2>{post.title}</h2><p>{post.excerpt || post.seoDescription}</p><div>{post.tags.map((tag) => <em key={tag}>{tag}</em>)}</div><a href={`${path}/blog/${post.slug}`}>Read article <ArrowUpRight size={15} /></a></div></article>; })}</div></section></main>;
 }
 
-export function StructuredContent({ document, blocks }: { document: SiteDocument; blocks: Page["blocks"] }) {
+export function StructuredContent({ document, blocks, richContent }: { document: SiteDocument; blocks: Page["blocks"]; richContent?:RichNode }) {
+  if(richContent) return <div className="structured-content"><RichDocumentView node={richContent} document={document}/></div>;
   return <div className="structured-content">{blocks.map((block) => {
     if (block.type === "heading") return createElement(block.headingLevel, { key: block.id }, renderInlineText(block.text));
     if (block.type === "paragraph") return <p key={block.id}>{renderInlineText(block.text)}</p>;

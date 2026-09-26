@@ -5,6 +5,10 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SiteCommand } from "@/domain/commands";
 import type { SiteDocument } from "@/domain/site-document";
+import { requestJson } from "./use-draft-save";
+import { DocumentEditor } from "@/features/content/document-editor";
+import { missingPublicationFields } from "@/domain/publication-selection";
+import { normalizePublishingSlug } from "@/domain/commands";
 import { RichTextField } from "@/features/content/rich-text";
 import { deriveImageAlt } from "@/domain/media";
 
@@ -24,15 +28,15 @@ export function PublishingEditor({ document, publishedDocument, execute, kind, c
   const publishedCollection = kind === "page" ? publishedDocument?.publishing.pages : publishedDocument?.publishing.posts;
   const publishedItem = item ? publishedCollection?.find((entry) => entry.id === item.id) : undefined;
   const isLive = publishedItem?.status === "published";
-  const hasUnpublishedChanges = item ? !publishedItem || JSON.stringify(item) !== JSON.stringify(publishedItem) : false;
+  const hasUnpublishedChanges = item ? !publishedItem || JSON.stringify({...item,status:undefined,publishedAt:undefined}) !== JSON.stringify({...publishedItem,status:undefined,publishedAt:undefined}) : false;
   const statusLabel = isLive ? hasUnpublishedChanges ? "published · changes pending" : "published" : "draft";
 
   return <section className="publishing-editor">
     <div className="content-explainer"><strong>{isPage ? "Standalone site pages" : "Blog posts"}</strong><p>{isPage ? "Create long-form pages such as a detailed About page, Services, Process, or Resources. Published pages can appear in your site navigation." : "Create articles here. Every published article is collected automatically on one Blog page—articles are never added as separate navigation tabs."}</p></div>
     <header><div><strong>{isPage ? "Site pages" : "Articles"}</strong><small>{collection.length}/{isPage ? 12 : 24} · drafts stay private</small></div><div className="publishing-header-actions">{!isPage && collection.length > 0 && <button type="button" className="secondary-action" onClick={onPreviewListing}>Preview Blog listing</button>}<button type="button" disabled={collection.length >= (isPage ? 12 : 24)} onClick={() => execute({ type: "publishing.add", kind })}><Plus size={15} />New {isPage ? "page" : "article"}</button></div></header>
-    {collection.length > 0 && <div className="publishing-picker">{collection.map((entry) => <button type="button" className={entry.id === selectedId ? "active" : ""} key={entry.id} onClick={() => onSelect?.(entry.id)}><FileText size={14} /><span>{entry.title}<small>{entry.status} · /{entry.slug}</small></span></button>)}</div>}
+    {collection.length > 0 && <div className="publishing-picker">{collection.map((entry) => <button type="button" className={entry.id === selectedId ? "active" : ""} key={entry.id} onClick={() => onSelect?.(entry.id)}><FileText size={14} /><span>{entry.title}<small>{publishedCollection?.some(p=>p.id===entry.id)?"published":"draft"} · /{entry.slug}</small></span></button>)}</div>}
     {!item ? <div className="portfolio-empty-state">Create your first {isPage ? "standalone page" : "blog article"}.</div> : <>
-      <div className="publishable-toolbar"><span className={`content-status ${isLive ? "published" : "draft"}`}>{statusLabel}</span><button type="button" className="secondary-action" disabled={!isLive || isPublishing} onClick={() => onPublishItem?.(kind, item.id, "draft")}><Check size={14} />{isLive ? `Unpublish ${isPage ? "page" : "article"}` : "Saved as draft"}</button><button type="button" className="primary-action" disabled={!ready || !canDirectPublish || (isLive && !hasUnpublishedChanges) || isPublishing} onClick={() => onPublishItem?.(kind, item.id, "published")}><Send size={14} />{isPublishing ? "Publishing…" : isLive ? "Publish changes" : `Publish ${isPage ? "page" : "article"}`}</button><button type="button" className="danger-action" disabled={isPublishing} onClick={() => execute({ type: "publishing.remove", kind, itemId: item.id })}><Trash2 size={14} />Remove</button></div>
+      <div className="publishable-toolbar"><span className={`content-status ${isLive ? "published" : "draft"}`}>{statusLabel}</span><button type="button" className="secondary-action" disabled={!isLive || isPublishing} onClick={() => onPublishItem?.(kind, item.id, "draft")}><Check size={14} />{isLive ? `Unpublish ${isPage ? "page" : "article"}` : "Saved as draft"}</button><button type="button" className="primary-action" disabled={!ready || !canDirectPublish || (isLive && !hasUnpublishedChanges) || isPublishing} onClick={() => onPublishItem?.(kind, item.id, "published")}><Send size={14} />{isPublishing ? "Publishing…" : isLive ? "Publish changes" : `Publish ${isPage ? "page" : "article"}`}</button><button type="button" className="danger-action" onMouseDown={e=>e.preventDefault()} disabled={isPublishing} onClick={() => {if(window.confirm(`Remove ${item.title}? If it is live, select its removal in Publish website to remove it from the public site.`)) execute({ type: "publishing.remove", kind, itemId: item.id });}}><Trash2 size={14} />Remove</button></div>
       <div className="publication-readiness"><strong>Publication readiness</strong><p>{isPage ? "Published pages can appear in the portfolio navigation." : "Publishing here saves the draft, updates the immutable portfolio snapshot, and adds the article to the single Blog listing automatically."}</p><ul>{readiness.map((entry) => <li className={entry.complete ? "complete" : ""} key={entry.label}>{entry.complete ? <Check size={13} /> : <span />}{entry.label}</li>)}</ul>{!canDirectPublish && <small>Save this portfolio and configure its public URL before publishing individual content.</small>}</div>
       {publishError && <p className="form-message">{publishError}</p>}
       <BufferedField label="Title" value={item.title} maxLength={120} onCommit={(value) => execute({ type: "publishing.update", kind, itemId: item.id, field: "title", value })} />
@@ -41,16 +45,16 @@ export function PublishingEditor({ document, publishedDocument, execute, kind, c
       {!isPage && <><BufferedField label="Article excerpt" value={"excerpt" in item ? item.excerpt : ""} maxLength={320} multiline allowEmpty onCommit={(value) => execute({ type: "publishing.update", kind, itemId: item.id, field: "excerpt", value })} /><BufferedField label="Tags (comma separated)" value={"tags" in item ? item.tags.join(", ") : ""} maxLength={260} allowEmpty onCommit={(value) => execute({ type: "publishing.update", kind, itemId: item.id, field: "tags", value: value.split(",").map((tag) => tag.trim()).filter(Boolean) })} /></>}
       <DirectImageField label="Cover image" document={document} selectedMediaId={item.coverMediaId} enabled={canUploadMedia} execute={execute} onSelect={(mediaId) => execute({ type: "publishing.update", kind, itemId: item.id, field: "coverMediaId", value: mediaId })} />
       <SeoEditor item={item} kind={kind} execute={execute} />
-      <BlockEditor document={document} kind={kind} item={item} execute={execute} canUploadMedia={canUploadMedia} />
+      <DocumentEditor key={item.id} site={document} kind={kind} item={item} execute={execute} enabled={canUploadMedia} /><details><summary>Advanced block controls</summary>{item.richContent ? <p>This page uses the continuous editor above. Edit there to preserve its formatting.</p> : <BlockEditor document={document} kind={kind} item={item} execute={execute} canUploadMedia={canUploadMedia} />}</details>
     </>}
   </section>;
 }
 
 function publicationReadiness(item: Publishable, kind: Kind, document: SiteDocument) {
-  const hasContent = item.blocks.some((block) => block.type === "image" ? Boolean(block.mediaId) : block.type === "list" || block.type === "ordered-list" ? block.items.length > 0 : Boolean(block.text.trim()));
+  const hasContent = !missingPublicationFields(item,kind,document).includes("content");
   const base = [
     { label: "Title", complete: Boolean(item.title.trim()) },
-    { label: "Unique public URL", complete: Boolean(item.slug.trim()) },
+    { label: "Unique public URL", complete: !missingPublicationFields(item,kind,document).includes("unique public URL") },
     { label: "SEO title", complete: Boolean(item.seoTitle.trim()) },
     { label: "SEO description", complete: Boolean(item.seoDescription.trim()) },
     { label: "Page content", complete: hasContent },
@@ -109,11 +113,9 @@ function DirectImageField({ label, document, selectedMediaId, enabled, execute, 
     const generatedAlt = deriveImageAlt(file.name, alt);
     const data = new FormData(); data.set("image", file); data.set("alt", generatedAlt);
     try {
-      const response = await fetch(`/api/projects/${document.projectId}/media`, { method: "POST", body: data });
-      const result = await response.json();
-      if (!response.ok) return setError(result.error ?? "Could not upload this image.");
+      const result = await requestJson(`/api/projects/${document.projectId}/media`, { method: "POST", body: data });
       execute({ type: "media.addAsset", asset: result.asset }); onSelect(result.asset.id); setAlt("");
-    } catch { setError("The image upload was interrupted."); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "The image upload was interrupted."); }
     finally { setBusy(false); }
   }
   return <section className="direct-image-field"><strong>{label}</strong>{selected && <div className="direct-image-preview"><Image src={selected.url} alt={selected.alt} fill sizes="260px" unoptimized /></div>}
@@ -127,8 +129,8 @@ function DirectImageField({ label, document, selectedMediaId, enabled, execute, 
 function BufferedField({ label, value, maxLength, multiline = false, allowEmpty = false, prefix, onCommit }: { label: string; value: string; maxLength: number; multiline?: boolean; allowEmpty?: boolean; prefix?: string; onCommit: (value: string) => void }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
-  const normalized = useMemo(() => draft.trim(), [draft]);
-  useEffect(() => { if (normalized === value || (!allowEmpty && !normalized)) return; const timer = window.setTimeout(() => onCommit(normalized), 5_000); return () => window.clearTimeout(timer); }, [allowEmpty, normalized, onCommit, value]);
-  const commit = () => { if (!allowEmpty && !normalized) setDraft(value); else if (normalized !== value) onCommit(normalized); };
+  const normalized = useMemo(() => prefix ? normalizePublishingSlug(draft) : draft.trim(), [draft,prefix]);
+  useEffect(() => { if (normalized === value || (!allowEmpty && !normalized)) return; const timer = window.setTimeout(() => onCommit(normalized), 700); return () => window.clearTimeout(timer); }, [allowEmpty, normalized, onCommit, value]);
+  const commit = () => { if(prefix) setDraft(normalized); if (!allowEmpty && !normalized) setDraft(value); else if (normalized !== value) onCommit(normalized); };
   return <label className="field"><span>{label}</span>{prefix && <small>{prefix}{draft}</small>}{multiline ? <textarea value={draft} maxLength={maxLength} rows={5} onChange={(event) => setDraft(event.target.value)} onBlur={commit} /> : <input value={draft} maxLength={maxLength} onChange={(event) => setDraft(event.target.value)} onBlur={commit} />}</label>;
 }

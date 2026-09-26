@@ -7,18 +7,20 @@ import { proposalCommand, type OpportunityPlan } from "@/domain/opportunity-plan
 
 type Received = { plan: OpportunityPlan; provider: string; revision: number };
 
-export function OpportunityPlanner({ document, execute, enabled }: { document: SiteDocument; execute: (command: SiteCommand) => void; enabled: boolean }) {
+export function OpportunityPlanner({ document, execute, enabled, ensureSaved }: { ensureSaved?:()=>Promise<number>; document: SiteDocument; execute: (command: SiteCommand) => void; enabled: boolean }) {
   const [result, setResult] = useState<Received | null>(null);
   const [decisions, setDecisions] = useState<Record<number, "accepted" | "rejected">>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const applied = Object.values(decisions).filter((decision) => decision === "accepted").length;
-  const current = Boolean(result && document.revision === result.revision + applied);
+  const [localRevision,setLocalRevision]=useState(-1);
+  const current = Boolean(result && document.revision === localRevision + applied);
 
   async function plan() {
     setBusy(true); setError(""); setResult(null); setDecisions({});
     try {
-      const response = await fetch(`/api/projects/${document.projectId}/opportunity-plan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedRevision: document.revision }) });
+      const expectedRevision=await ensureSaved?.()??document.revision;setLocalRevision(document.revision);
+      const response = await fetch(`/api/projects/${document.projectId}/opportunity-plan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedRevision }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not prepare a plan.");
       setResult(payload as Received);

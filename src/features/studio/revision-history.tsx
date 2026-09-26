@@ -45,12 +45,12 @@ export function RevisionHistory({ projectId, currentRevision, onClose, onRestore
         <div className="revision-list" role="list">{revisions.map((item) => <button type="button" role="listitem" className={item.revision === selected ? "selected" : ""} key={item.revision} onClick={() => setSelected(item.revision)}>
           <i style={{ background: accentColor[item.summary.accent] ?? "#4deeea" }} />
           <span><strong>Revision {item.revision}</strong><small>{new Date(item.createdAt).toLocaleString()}</small></span>
-          <em>{item.revision === currentRevision ? "Current" : item.revision === publishedRevision ? "Live" : item.source.startsWith("restore:") ? `Restored from ${item.source.split(":")[1]}` : item.source}</em>
+          <em>{item.revision === currentRevision ? "Current" : item.revision === publishedRevision ? "Last published source" : item.source.startsWith("restore:") ? `Restored from ${item.source.split(":")[1]}` : item.source}</em>
         </button>)}</div>
         <div className="revision-preview">{target && <>
           <div className={`revision-mini bg-${target.summary.background}`} style={{ "--mini-accent": accentColor[target.summary.accent] } as React.CSSProperties}><i /><strong>{target.summary.name}</strong><span>{target.summary.role}</span><small>{target.summary.preset} · {target.summary.motion}</small></div>
           <dl><div><dt>Identity</dt><dd>{target.summary.name}</dd></div><div><dt>Role</dt><dd>{target.summary.role}</dd></div><div><dt>Visual system</dt><dd>{target.summary.accent} / {target.summary.background}</dd></div><div><dt>Scene</dt><dd>{target.summary.preset} / {target.summary.motion}</dd></div><div><dt>Featured skills</dt><dd>{target.summary.skills}</dd></div></dl>
-          {target.revision === publishedRevision && <p className="history-live"><Check size={14} />This snapshot is currently public.</p>}
+          {target.revision === publishedRevision && <p className="history-live"><Check size={14} />This draft was used for the last publication. Only the selected content went live.</p>}
         </>}</div>
       </div>}
       {error && revisions.length > 0 && <div className="form-message">{error}</div>}

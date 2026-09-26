@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { richNodeSchema } from "./rich-document";
 
 export const accentOptions = ["cyan", "violet", "coral", "lime", "rose", "blue", "olive"] as const;
 export const backgroundOptions = ["midnight", "ink", "plum", "cloud", "ivory"] as const;
@@ -18,7 +19,7 @@ export type OpportunityType = typeof opportunityTypeOptions[number];
 
 const publicHttpUrl = z.string().url().refine((value) => value.startsWith("https://") || value.startsWith("http://"), "Use an http or https URL.");
 
-const structuredBlockSchema = z.object({
+export const structuredBlockSchema = z.object({
   id: z.string().min(1),
   type: z.enum(structuredBlockTypeOptions),
   text: z.string().trim().max(3000).default(""),
@@ -36,7 +37,8 @@ const publishableBaseSchema = z.object({
   coverMediaId: z.string().max(120).default(""),
   status: z.enum(["draft", "published"]).default("draft"),
   publishedAt: z.string().nullable().default(null),
-  blocks: z.array(structuredBlockSchema).max(40).default([]),
+  blocks: z.array(structuredBlockSchema).max(200).default([]),
+  richContent: richNodeSchema.optional(),
 });
 
 const customPageSchema = publishableBaseSchema.extend({

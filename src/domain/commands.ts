@@ -1,3 +1,5 @@
+import { richNodeSchema } from "./rich-document";
+import { structuredBlockSchema } from "./site-document";
 import { z } from "zod";
 import {
   accentOptions,
@@ -64,6 +66,7 @@ export const siteCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("media.removeAsset"), mediaId: z.string().min(1) }),
   z.object({ type: z.literal("publishing.add"), kind: z.enum(["page", "post"]), title: z.string().trim().min(1).max(120).optional() }),
   z.object({ type: z.literal("publishing.update"), kind: z.enum(["page", "post"]), itemId: z.string().min(1), field: z.enum(["title", "slug", "seoTitle", "seoDescription", "coverMediaId", "navigationLabel", "excerpt", "tags"]), value: z.union([z.string(), z.array(z.string())]) }),
+  z.object({ type: z.literal("publishing.setContent"), kind: z.enum(["page", "post"]), itemId:z.string().min(1), richContent:richNodeSchema, blocks:z.array(structuredBlockSchema).max(200) }),
   z.object({ type: z.literal("publishing.remove"), kind: z.enum(["page", "post"]), itemId: z.string().min(1) }),
   z.object({ type: z.literal("publishing.setStatus"), kind: z.enum(["page", "post"]), itemId: z.string().min(1), status: z.enum(["draft", "published"]) }),
   z.object({ type: z.literal("block.add"), kind: z.enum(["page", "post"]), itemId: z.string().min(1), blockType: z.enum(["heading", "paragraph", "quote", "list", "ordered-list", "image"]), afterBlockId: z.string().min(1).optional() }),
@@ -101,6 +104,7 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
   const command = siteCommandSchema.parse(candidate);
   let next: SiteDocument;
 
+  if(command.type.startsWith("block.") && "kind" in command && "itemId" in command && findPublishable(current,command.kind as "page"|"post",command.itemId)?.richContent) throw new Error("This page uses the continuous rich text editor. Open the page and edit its content there to preserve formatting.");
   switch (command.type) {
     case "visitor.enable":
       if (current.visitor.enabled === command.enabled) return current;
@@ -370,6 +374,9 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, [command.field]: value })), ...nextRevision(current) };
       break;
     }
+    case "publishing.setContent":
+      next = {...current, publishing:updatePublishable(current,command.kind,command.itemId,entry=>({...entry,richContent:command.richContent,blocks:command.blocks})),...nextRevision(current)};
+      break;
     case "publishing.remove":
       if (!findPublishable(current, command.kind, command.itemId)) throw new Error(`The requested ${command.kind} does not exist.`);
       next = command.kind === "page"
@@ -402,7 +409,7 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       if (command.afterBlockId && insertionIndex === 0) throw new Error("The requested insertion point does not exist.");
       const blocks = [...item.blocks];
       blocks.splice(insertionIndex, 0, block);
-      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, blocks })), ...nextRevision(current) };
+      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, richContent: undefined, blocks })), ...nextRevision(current) };
       break;
     }
     case "block.update": {
@@ -413,13 +420,13 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       if (command.field === "mediaId" && value && !current.media.assets.some((asset) => asset.id === value)) throw new Error("Choose an image from the media library.");
       if (command.field === "headingLevel" && (typeof value !== "string" || !["h2", "h3", "h4", "h5", "h6"].includes(value))) throw new Error("Choose a heading level from H2 through H6.");
       if (JSON.stringify(block[command.field]) === JSON.stringify(value)) return current;
-      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, blocks: entry.blocks.map((candidate) => candidate.id === block.id ? { ...candidate, [command.field]: value } : candidate) })), ...nextRevision(current) };
+      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, richContent: undefined, blocks: entry.blocks.map((candidate) => candidate.id === block.id ? { ...candidate, [command.field]: value } : candidate) })), ...nextRevision(current) };
       break;
     }
     case "block.remove": {
       const item = findPublishable(current, command.kind, command.itemId);
       if (!item?.blocks.some((entry) => entry.id === command.blockId)) throw new Error("The requested content block does not exist.");
-      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, blocks: entry.blocks.filter((candidate) => candidate.id !== command.blockId) })), ...nextRevision(current) };
+      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, richContent: undefined, blocks: entry.blocks.filter((candidate) => candidate.id !== command.blockId) })), ...nextRevision(current) };
       break;
     }
     case "block.move": {
@@ -431,7 +438,7 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       if (target < 0 || target >= item.blocks.length) return current;
       const blocks = [...item.blocks];
       [blocks[index], blocks[target]] = [blocks[target], blocks[index]];
-      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, blocks })), ...nextRevision(current) };
+      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, richContent: undefined, blocks })), ...nextRevision(current) };
       break;
     }
     case "block.moveTo": {
@@ -444,7 +451,7 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
       const blocks = [...item.blocks];
       const [moved] = blocks.splice(index, 1);
       blocks.splice(target, 0, moved);
-      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, blocks })), ...nextRevision(current) };
+      next = { ...current, publishing: updatePublishable(current, command.kind, command.itemId, (entry) => ({ ...entry, richContent: undefined, blocks })), ...nextRevision(current) };
       break;
     }
   }
@@ -503,6 +510,7 @@ export function describeCommand(command: SiteCommand, document: SiteDocument) {
     case "media.removeAsset": return "Removed an image from the media library.";
     case "publishing.add": return `Added a ${command.kind} draft.`;
     case "publishing.update": return `Updated ${command.kind} ${command.field}.`;
+    case "publishing.setContent": return "Updated rich page content.";
     case "publishing.remove": return `Removed a ${command.kind}.`;
     case "publishing.setStatus": return `${command.status === "published" ? "Published" : "Returned to draft"} the ${command.kind}.`;
     case "block.add": return `Added a ${command.blockType} block.`;

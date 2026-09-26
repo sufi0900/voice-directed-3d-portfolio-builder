@@ -1,1 +1,1 @@
-fix(templates): differentiate V25 hero and section layouts
+fix(voxfolio): stabilize publishing and improve studio editing in v26

@@ -1,3 +1,4 @@
+import { HomepageJournal } from "./homepage-journal";
 import { isCollectionTemplate } from "@/domain/template-contracts";
 import { CollectionSections } from "./collection-templates";
 import { ArrowUpRight, Globe2, Mail, MapPin } from "lucide-react";
@@ -27,7 +28,11 @@ export function PortfolioNavigation({ document, publicBasePath, onNavigateSectio
   </nav>;
 }
 
-export function PortfolioSections({ document, editing = false, publicBasePath, onOpenPage }: { document: SiteDocument; editing?: boolean; publicBasePath?: string; onOpenPage?: (pageId: string) => void }) {
+export function PortfolioSections(props:{document:SiteDocument;editing?:boolean;publicBasePath?:string;onOpenPage?:(id:string)=>void;onOpenPost?:(id:string)=>void}) {
+ return <><PortfolioSectionBody {...props}/><HomepageJournal document={props.document} publicBasePath={props.publicBasePath} onOpenPost={props.onOpenPost}/></>;
+}
+
+function PortfolioSectionBody({ document, editing = false, publicBasePath, onOpenPage }: { document: SiteDocument; editing?: boolean; publicBasePath?: string; onOpenPage?: (pageId: string) => void }) {
   if (isCollectionTemplate(document.design.template)) return <CollectionSections document={document} editing={editing} publicBasePath={publicBasePath} onOpenPage={onOpenPage} />;
   if (document.design.template === "professional-2d") return <ProfessionalPortfolioSections document={document} editing={editing} publicBasePath={publicBasePath} onOpenPage={onOpenPage} />;
   const cinematic = isCinematicTemplate(document.design.template);

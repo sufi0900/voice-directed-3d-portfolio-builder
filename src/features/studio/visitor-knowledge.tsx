@@ -1,5 +1,6 @@
 "use client";
 
+import { requestJson } from "./use-draft-save";
 import { useEffect, useState } from "react";
 import type { SiteDocument } from "@/domain/site-document";
 import { applySiteCommand } from "@/domain/commands";
@@ -10,6 +11,8 @@ export function VisitorKnowledge({ projectId, initialDocument }: { projectId: st
   const [site, setSite] = useState(initialDocument);
   const [documents, setDocuments] = useState<DocumentEntry[]>([]);
   const [error, setError] = useState("");
+  const [notice,setNotice]=useState("");
+  const [retryActivation,setRetryActivation]=useState<boolean|null>(null);
   const [busy, setBusy] = useState(false);
   const base = `/api/projects/${projectId}/visitor-documents`;
   useEffect(() => {
@@ -37,7 +40,7 @@ export function VisitorKnowledge({ projectId, initialDocument }: { projectId: st
     finally { setBusy(false); }
   }
   async function toggle(enabled: boolean) {
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setNotice(""); setRetryActivation(enabled);
     try {
       const latestResponse = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
       const latest = await latestResponse.json(); if (!latestResponse.ok) throw new Error(latest.error);
@@ -46,19 +49,28 @@ export function VisitorKnowledge({ projectId, initialDocument }: { projectId: st
       const response = await fetch(`/api/projects/${projectId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ document: next, expectedRevision: current.revision, source: "manual" }) });
       const result = await response.json(); if (!response.ok) throw new Error(result.error);
       setSite({ ...next, revision: result.revision });
+      const liveResponse=await fetch(`/api/projects/${projectId}/publish`,{cache:"no-store",signal:AbortSignal.timeout(20000)});
+      const live=await liveResponse.json();
+      if(!liveResponse.ok) throw new Error(live.error || "Could not check live settings. Retry activation.");
+      if(live.publication){
+        const publicationResult=await requestJson(`/api/projects/${projectId}/publish`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({slug:live.publication.slug,expectedRevision:result.revision,selection:["visitor"]})});
+        if(publicationResult.warning) throw new Error(publicationResult.warning);
+        setNotice(enabled?"Visitor Vox is now enabled on your live website.":"Visitor Vox is now disabled on your live website.");
+      }else setNotice("Setting saved. Publish your portfolio from Studio to activate it on the website.");
+      setRetryActivation(null);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save the setting. Refresh the project and retry."); }
     finally { setBusy(false); }
   }
   return <section className="visitor-knowledge" aria-label="Visitor Vox knowledge">
     <h2>Visitor Vox</h2>
     <p>Let visitors ask about published work by voice or text. Upload up to 10 documents; all readable text is saved with your portfolio and searched when a visitor asks a question. The original file is processed and discarded. Your saved text and document list are available when you sign in again.</p>
-    <label className="visitor-toggle"><input type="checkbox" checked={site.visitor.enabled} disabled={busy} onChange={(event) => void toggle(event.target.checked)} />Show Visitor Vox on my public portfolio</label>
+    <div className="visitor-toggle"><strong>Visitor Vox: {site.visitor.enabled?"Enabled":"Disabled"}</strong><button type="button" className="primary-action" disabled={busy} onClick={()=>void toggle(!site.visitor.enabled)}>{busy?"Saving…":site.visitor.enabled?"Disable & save":"Enable & save"}</button></div>{notice && <p role="status">{notice}</p>}
     <p>Uploaded documents stay private until you enable Visitor Vox and publish the portfolio from Studio. New uploads require publishing again. Removing a document immediately stops it from being used. Never upload information that visitors must not receive.</p>
     <label>Upload TXT, MD, PDF or DOCX (2 MB per file, up to 200,000 readable characters)
       <input type="file" accept=".txt,.md,.pdf,.docx" disabled={busy || documents.length >= 10} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} />
     </label>
     {busy && <p role="status">Saving your changes…</p>}
-    {error && <p role="alert">{error}</p>}
+    {error && <p role="alert">{error}</p>}{retryActivation !== null && !busy && <button type="button" onClick={()=>void toggle(retryActivation)}>Retry saving live setting</button>}
     <h3>Saved documents ({documents.length}/10)</h3>
     <ul>{documents.map((entry) => <li key={entry.id}><strong>{entry.file_name}</strong><small>{entry.body.length.toLocaleString()} characters saved · {entry.published ? "Included after latest publication" : "Publish the portfolio to make available"}</small><details><summary>Review extracted text</summary><p className="visitor-saved-text">{entry.body}</p></details><button type="button" disabled={busy} onClick={() => void remove(entry.id)}>Remove document</button></li>)}</ul>
     {site.visitor.facts.length > 0 && <p>Legacy approved notes remain in this portfolio. You can edit them in earlier Studio versions; future knowledge is managed here as documents.</p>}

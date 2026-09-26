@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, Plus, Share2, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { normalizePublishingSlug } from "@/domain/commands";
 import type { SiteCommand } from "@/domain/commands";
 import { accentOptions, socialPlatformOptions, type PortfolioSection, type SiteDocument } from "@/domain/site-document";
 import { PublishingEditor } from "./publishing-editor";
@@ -16,9 +17,9 @@ import { ProfessionalMemory } from "./professional-memory";
 import { AgentHealth } from "./agent-health";
 
 export type PreviewTarget = { section: string; itemId?: string };
-type Props = { document: SiteDocument; publishedDocument?: SiteDocument; execute: (command: SiteCommand) => void; panel: "content" | "design" | "scene" | "opportunity"; canUploadMedia?: boolean; previewTarget?: PreviewTarget; onPreviewTarget?: (target: PreviewTarget) => void; onPublishItem?: (kind: "page" | "post", itemId: string, status: "draft" | "published") => void; publishingItemId?: string; itemPublishError?: string; canDirectPublish?: boolean };
+type Props = { ensureSaved?:()=>Promise<number>; document: SiteDocument; publishedDocument?: SiteDocument; execute: (command: SiteCommand) => void; panel: "content" | "design" | "scene" | "opportunity"; canUploadMedia?: boolean; previewTarget?: PreviewTarget; onPreviewTarget?: (target: PreviewTarget) => void; onPublishItem?: (kind: "page" | "post", itemId: string, status: "draft" | "published") => void; publishingItemId?: string; itemPublishError?: string; canDirectPublish?: boolean };
 
-export function ManualControls({ document, publishedDocument, execute, panel, canUploadMedia = false, previewTarget, onPreviewTarget, onPublishItem, publishingItemId = "", itemPublishError = "", canDirectPublish = false }: Props) {
+export function ManualControls({ document, publishedDocument, execute, panel, canUploadMedia = false, previewTarget, onPreviewTarget, onPublishItem, publishingItemId = "", itemPublishError = "", canDirectPublish = false, ensureSaved }: Props) {
   const activeTemplate = getTemplateContract(document.design.template);
   const flat = isFlatTemplate(document.design.template);
   const [newSkill, setNewSkill] = useState("");
@@ -34,7 +35,7 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
       <nav className="studio-section-nav opportunity-nav" aria-label="Opportunity workspace"><a href="#opportunity-details">Details</a>{document.opportunity.status !== "canonical" && <><a href="#opportunity-source">Source review</a><a href="#opportunity-planning">Suggestions</a>{canUploadMedia && <a href="#opportunity-sharing">Sharing</a>}</>}</nav>
       <div className="opportunity-workspace-block" id="opportunity-details"><OpportunityEditor document={document} execute={execute} /></div>
       {canUploadMedia && <><ProfessionalMemory document={document} /><AgentHealth projectId={document.projectId} /></>}
-      {document.opportunity.status !== "canonical" && <><div className="opportunity-workspace-block" id="opportunity-source"><OpportunitySourceReview document={document} /></div><div className="opportunity-workspace-block" id="opportunity-planning"><OpportunityPlanner document={document} execute={execute} enabled={canUploadMedia} /></div>{canUploadMedia && <div className="opportunity-workspace-block" id="opportunity-sharing"><OpportunityShare document={document} publishedDocument={publishedDocument} /></div>}</>}
+      {document.opportunity.status !== "canonical" && <><div className="opportunity-workspace-block" id="opportunity-source"><OpportunitySourceReview document={document} ensureSaved={ensureSaved} /></div><div className="opportunity-workspace-block" id="opportunity-planning"><OpportunityPlanner document={document} ensureSaved={ensureSaved} execute={execute} enabled={canUploadMedia} /></div>{canUploadMedia && <div className="opportunity-workspace-block" id="opportunity-sharing"><OpportunityShare document={document} publishedDocument={publishedDocument} /></div>}</>}
     </div>
   );
 
@@ -86,7 +87,7 @@ export function ManualControls({ document, publishedDocument, execute, panel, ca
         <div className="collection-title"><strong>{item.title}</strong><span className="collection-actions"><button type="button" disabled={index === 0} aria-label={`Move ${item.title} up`} onClick={() => execute({ type: "project.move", itemId: item.id, direction: "up" })}><ArrowUp size={14} /></button><button type="button" disabled={index === document.content.projects.length - 1} aria-label={`Move ${item.title} down`} onClick={() => execute({ type: "project.move", itemId: item.id, direction: "down" })}><ArrowDown size={14} /></button><button type="button" aria-label={`Remove ${item.title}`} onClick={() => execute({ type: "project.remove", itemId: item.id })}><Trash2 size={14} /></button></span></div>
         <BufferedField label="Project title" value={item.title} maxLength={100} onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "title", value })} />
         <BufferedField label="Summary" value={item.summary} maxLength={500} multiline allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "summary", value })} />
-        <BufferedField label="Case-study slug" value={item.caseStudySlug} maxLength={80} onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "caseStudySlug", value })} />
+        <BufferedField label="Case-study slug" value={item.caseStudySlug} maxLength={80} onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "caseStudySlug", value:normalizePublishingSlug(value) })} />
         <BufferedField label="Your role" value={item.role} maxLength={100} allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "role", value })} />
         <BufferedField label="Period" value={item.period} maxLength={80} allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "period", value })} />
         <BufferedField label="Challenge" value={item.challenge} maxLength={1200} multiline allowEmpty onCommit={(value) => execute({ type: "project.update", itemId: item.id, field: "challenge", value })} />
@@ -223,7 +224,7 @@ function BufferedInput({ value, maxLength, onCommit, ariaLabel }: { value: strin
   useEffect(() => setDraft(value), [value]);
   useEffect(() => {
     if (draft.trim() === value || !draft.trim()) return;
-    const timer = window.setTimeout(() => onCommit(draft.trim()), 5_000);
+    const timer = window.setTimeout(() => onCommit(draft.trim()), 700);
     return () => window.clearTimeout(timer);
   }, [draft, onCommit, value]);
   const commit = () => { const next = draft.trim(); if (!next) setDraft(value); else if (next !== value) onCommit(next); };
@@ -235,10 +236,10 @@ function BufferedField({ label, value, maxLength, multiline = false, allowEmpty 
   useEffect(() => setDraft(value), [value]);
   useEffect(() => {
     if (draft.trim() === value || (!allowEmpty && !draft.trim())) return;
-    const timer = window.setTimeout(() => onCommit(draft.trim()), 5_000);
+    const timer = window.setTimeout(() => onCommit(draft.trim()), 700);
     return () => window.clearTimeout(timer);
   }, [allowEmpty, draft, onCommit, value]);
-  const commit = () => { const next = draft.trim(); if (!allowEmpty && !next) setDraft(value); else if (next !== value) onCommit(next); };
+  const commit = () => { const next = label.toLowerCase().includes("slug") ? normalizePublishingSlug(draft) : draft.trim(); setDraft(next); if (!allowEmpty && !next) setDraft(value); else if (next !== value) onCommit(next); };
   return <Field label={label}>{multiline ? <textarea value={draft} maxLength={maxLength} rows={5} onChange={(event) => setDraft(event.target.value)} onBlur={commit} /> : <input value={draft} maxLength={maxLength} onChange={(event) => setDraft(event.target.value)} onBlur={commit} />}</Field>;
 }
 

@@ -6,18 +6,20 @@ import type { SourceChange } from "@/domain/opportunity-source-review";
 
 type Review = { sourceRevision: number; variantRevision: number; lastReviewedRevision: number | null; changes: SourceChange[] };
 
-export function OpportunitySourceReview({ document }: { document: SiteDocument }) {
+export function OpportunitySourceReview({ document, ensureSaved }: { document: SiteDocument; ensureSaved?:()=>Promise<number> }) {
   const [review, setReview] = useState<Review | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const endpoint = `/api/projects/${document.projectId}/source-review`;
-  const stale = review !== null && document.revision !== review.variantRevision;
+  const [localRevision,setLocalRevision]=useState(-1);
+  const stale = review !== null && document.revision !== localRevision;
 
   async function compare() {
     setBusy(true); setError(""); setReview(null); setSelected([]);
     try {
-      const response = await fetch(endpoint, { cache: "no-store" });
+      await ensureSaved?.();setLocalRevision(document.revision);
+      const response = await fetch(endpoint, { signal:AbortSignal.timeout(20000), cache: "no-store" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
       setReview(result as Review);

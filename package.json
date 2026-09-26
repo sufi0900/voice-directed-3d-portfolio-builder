@@ -1,6 +1,6 @@
 {
   "name": "voice-directed-3d-portfolio-builder",
-  "version": "25.1.0",
+  "version": "26.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -16,6 +16,10 @@
     "@react-three/fiber": "^9.3.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.57.4",
+    "@tiptap/extension-image": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
     "lucide-react": "^0.544.0",
     "mammoth": "^1.12.3",
     "next": "^15.5.2",

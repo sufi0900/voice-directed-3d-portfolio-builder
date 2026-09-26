@@ -1,3 +1,5 @@
+> **V26 cumulative update:** read [RELEASE_V26.md](RELEASE_V26.md) for required migration 016, setup, changes and manual acceptance tests. Implementation details: [V26_ARCHITECTURE.md](V26_ARCHITECTURE.md). Earlier milestones below are historical.
+
 # Voxfolio Implementation Audit (Post-V20.1)
 
 > Historical OpenCode snapshot. Its failing-test counts and missing V20.2 items describe the state **before** V20.2 remediation. Read `V20_2_RELEASE_NOTES.md` for current implementation and verification. V20.3 and V21 remain pending.

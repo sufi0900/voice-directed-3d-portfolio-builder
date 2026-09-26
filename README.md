@@ -1,3 +1,5 @@
+> **V26 cumulative update:** read [RELEASE_V26.md](RELEASE_V26.md) for required migration 016, setup, changes and manual acceptance tests. Implementation details: [V26_ARCHITECTURE.md](V26_ARCHITECTURE.md). Earlier milestones below are historical.
+
 # Voice-Directed 3D Portfolio Builder
 
 For V24.2 setup, migration 015 and the manual test checklist, read [RELEASE_V24_2.md](RELEASE_V24_2.md) before enabling persistent Visitor Vox knowledge.

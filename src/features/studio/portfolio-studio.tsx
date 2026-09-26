@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { SiteCommand } from "@/domain/commands";
 import type { PortfolioSection, SiteDocument } from "@/domain/site-document";
+import { hasPublicationChanges, publicationChoices } from "@/domain/publication-selection";
+import { useDraftSave, requestJson } from "./use-draft-save";
 import { normalizePublicationSlug } from "@/domain/publication";
 import { guestClaimPath } from "@/domain/user-lifecycle";
 import { ManualControls, type PreviewTarget } from "./manual-controls";
@@ -27,24 +29,20 @@ type Publication = { slug: string; revision: number; published_at: string; docum
 
 export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio", persistence = "local", initialPublication, authenticated = false, userEmail }: { initialDocument?: SiteDocument; projectName?: string; persistence?: "local" | "server"; initialPublication?: Publication; authenticated?: boolean; userEmail?: string }) {
   const [state, dispatch] = useReducer(studioReducer, initialStudioState);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const serverRevision = useRef(initialDocument?.revision ?? 0);
-  const [cloudRevision, setCloudRevision] = useState(initialDocument?.revision ?? 0);
   const hydratedDocument = useRef(initialDocument);
-  const initialSaveSkipped = useRef(false);
-  const skipExternalHydrateSave = useRef(false);
+  const { saved, error: saveError, flush, revision: serverRevision, acceptExternal } = useDraftSave(state.present, state.hydrated, persistence === "server", initialDocument?.revision ?? 0);
   const latestDraft = useRef(state.present);
   latestDraft.current = state.present;
   const [reducedMotion, setReducedMotion] = useState(false);
   const [previewOnly, setPreviewOnly] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const publishBusy=useRef(false);
   const [publishing, setPublishing] = useState(false);
   const [publication, setPublication] = useState<Publication | undefined>(initialPublication);
   const [publishedDocument, setPublishedDocument] = useState<SiteDocument | undefined>(initialPublication?.document);
-  const [pendingGlobalPublication, setPendingGlobalPublication] = useState(false);
+  const [selectedPublication, setSelectedPublication] = useState<string[]>([]);
   const [publishingItemId, setPublishingItemId] = useState("");
-  const [saveRetry, setSaveRetry] = useState(0);
+
   const [publishError, setPublishError] = useState("");
   const [slug, setSlug] = useState(initialPublication?.slug ?? normalizePublicationSlug(projectName));
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -53,8 +51,9 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   const [voiceWidth, setVoiceWidth] = useState(320);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [voiceHidden, setVoiceHidden] = useState(false);
-  const [pendingItemPublication, setPendingItemPublication] = useState<{ kind: "page" | "post"; itemId: string; status: "draft" | "published"; targetRevision: number } | null>(null);
   const [itemPublishError, setItemPublishError] = useState("");
+  const [dismissedError,setDismissedError]=useState("");
+  const visibleError=state.lastCommandError || itemPublishError || saveError;
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -77,42 +76,19 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   }, [state.present.design.accent, state.present.identity.name, state.present.media.headshotUrl]);
 
   useEffect(() => {
-    if (!state.hydrated) return;
-    if (persistence === "local") localStorage.setItem(STORAGE_KEY, JSON.stringify(state.present));
-    setSaved(false);
-    if (skipExternalHydrateSave.current) { skipExternalHydrateSave.current = false; setSaved(true); return; }
-    if (persistence === "server" && !initialSaveSkipped.current) { initialSaveSkipped.current = true; setSaved(true); return; }
-    const timer = window.setTimeout(async () => {
-      if (persistence === "local") return setSaved(true);
-      setSaveError("");
-      try {
-        const response = await fetch(`/api/projects/${state.present.projectId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ document: state.present, expectedRevision: serverRevision.current, source: state.receipts.at(-1)?.source ?? "autosave" }) });
-        const result = await response.json();
-        if (!response.ok) { setSaveError(result.code === "REVISION_CONFLICT" ? "This project changed elsewhere. Refresh before editing again." : result.error ?? "Save failed."); return; }
-        serverRevision.current = result.revision; setCloudRevision(result.revision); setSaved(true);
-      } catch { setSaveError("The draft could not reach the server. Your edits remain in this browser; retry before publishing."); }
-    }, 650);
-    return () => window.clearTimeout(timer);
-  }, [persistence, saveRetry, state.hydrated, state.present, state.receipts]);
-
-  useEffect(() => {
-    if (persistence !== "server" || !state.hydrated || !saved || saveError || cloudRevision !== state.present.revision) return;
-    const refresh = async () => {
-      if (document.visibilityState !== "visible" || document.activeElement?.matches("input, textarea, [contenteditable=true]")) return;
+    if (persistence !== "server" || !state.hydrated || !saved || saveError) return;
+    const timer = window.setInterval(async () => {
+      if (document.visibilityState !== "visible" || document.activeElement?.matches("input,textarea,[contenteditable=true]")) return;
       const before = latestDraft.current;
       try {
-        const response = await fetch(`/api/projects/${before.projectId}`, { cache: "no-store" });
-        if (!response.ok) return;
-        const result = await response.json();
-        if (result.project?.revision <= serverRevision.current || latestDraft.current !== before || document.activeElement?.matches("input, textarea, [contenteditable=true]")) return;
-        skipExternalHydrateSave.current = true;
-        serverRevision.current = result.project.revision; setCloudRevision(result.project.revision);
-        dispatch({ type: "hydrate", document: result.project.document });
-      } catch { /* Keep the local draft until the next refresh. */ }
-    };
-    const timer = window.setInterval(() => void refresh(), 12000);
+        const result = await requestJson(`/api/projects/${before.projectId}`, { cache: "no-store" });
+        if (result.project.revision <= serverRevision.current || latestDraft.current !== before) return;
+        acceptExternal(result.project.document, result.project.revision);
+        dispatch({type:"hydrate", document:result.project.document});
+      } catch { /* Retry external refresh later; local edits are retained. */ }
+    }, 12000);
     return () => window.clearInterval(timer);
-  }, [cloudRevision, persistence, saved, saveError, state.hydrated, state.present]);
+  }, [persistence, state.hydrated, saved, saveError, acceptExternal, serverRevision]);
 
   const executeManual = useCallback((command: SiteCommand) => dispatch({ type: "execute", command, source: "manual" }), []);
   const executeVoice = useCallback((command: SiteCommand, next?: SiteDocument) => dispatch({ type: "execute", command, source: "voice", next }), []);
@@ -125,65 +101,42 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   }, []);
   const voice = useAssemblyAIAgent({ document: state.present, execute: executeVoice, undo: undoVoice, navigate: navigateFromAssistant });
   const focusedSkill = useMemo(() => state.present.skills.find((skill) => skill.id === state.present.scene.focusedSkill), [state.present]);
-  const portfolioHasUnpublishedChanges = useMemo(() => Boolean(publication && (!publishedDocument || JSON.stringify(publishedDocument) !== JSON.stringify(state.present))), [publication, publishedDocument, state.present]);
+  const portfolioHasUnpublishedChanges = useMemo(() => Boolean(publication && (hasPublicationChanges(state.present, publishedDocument))), [publication, publishedDocument, state.present]);
 
-  const publishItem = useCallback((kind: "page" | "post", itemId: string, status: "draft" | "published") => {
-    if (persistence !== "server") return setItemPublishError("Sign in and save this portfolio before publishing content.");
-    if (slug.length < 3) return setItemPublishError("Set a valid public portfolio URL from the main Publish dialog first.");
-    setItemPublishError("");
-    const collection = kind === "page" ? state.present.publishing.pages : state.present.publishing.posts;
-    const item = collection.find((entry) => entry.id === itemId);
-    if (!item) return setItemPublishError("That content item no longer exists.");
-    const changesStatus = item.status !== status;
-    if (changesStatus) executeManual({ type: "publishing.setStatus", kind, itemId, status });
-    setPendingItemPublication({ kind, itemId, status, targetRevision: state.present.revision + (changesStatus ? 1 : 0) });
-  }, [executeManual, persistence, slug.length, state.present]);
-
-  useEffect(() => {
-    if (!pendingItemPublication || !saved || cloudRevision < pendingItemPublication.targetRevision || cloudRevision !== state.present.revision || publishing) return;
-    const snapshot = state.present;
-    setPendingItemPublication(null); setPublishing(true); setPublishingItemId(pendingItemPublication.itemId); setItemPublishError("");
-    void (async () => {
-      try {
-        const response = await fetch(`/api/projects/${state.present.projectId}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, expectedRevision: cloudRevision }) });
-        const result = await response.json();
-        if (!response.ok) return setItemPublishError(result.error ?? "Could not update the live article collection.");
-        setPublishedDocument(snapshot);
-        setPublication({ ...result.publication, document: snapshot });
-      } catch { setItemPublishError("The publication request was interrupted. Your saved draft is safe; please try again."); }
-      finally { setPublishing(false); setPublishingItemId(""); }
-    })();
-  }, [cloudRevision, pendingItemPublication, publishing, saved, slug, state.present]);
-
-  function publish() {
+  const publishChoices = publicationChoices(state.present, publishedDocument);
+  function openPublication() {
     setPublishError("");
-    setPendingGlobalPublication(true);
-    if (saveError) { setSaveError(""); setSaveRetry((value) => value + 1); }
+    setSelectedPublication(publicationChoices(latestDraft.current, publishedDocument).filter(row=>!row.missing.length).map(row=>row.key));
+    setPublishOpen(true);
   }
-
-  useEffect(() => {
-    if (!pendingGlobalPublication || publishing || !saved || saveError || cloudRevision !== state.present.revision) return;
-    const snapshot = state.present;
-    setPendingGlobalPublication(false); setPublishing(true); setPublishError("");
-    void (async () => {
-      try {
-        const response = await fetch(`/api/projects/${snapshot.projectId}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, expectedRevision: cloudRevision }) });
-        const result = await response.json();
-        if (!response.ok) return setPublishError(result.error ?? "Publishing failed.");
-        setPublishedDocument(snapshot);
-        setPublication({ ...result.publication, document: snapshot });
-        setPublishOpen(false);
-      } catch { setPublishError("The publish request was interrupted. Your saved draft is safe; please try again."); }
-      finally { setPublishing(false); }
-    })();
-  }, [cloudRevision, pendingGlobalPublication, publishing, saveError, saved, slug, state.present]);
-
+  async function performPublication(selection: string[], itemAction?: {kind:"page"|"post";id:string;status:"draft"|"published"}) {
+    if (publishBusy.current) return;
+    publishBusy.current=true;
+    setPublishing(true); setPublishError(""); setItemPublishError("");
+    if(itemAction) setPublishingItemId(itemAction.id);
+    try {
+      const confirmedRevision = await flush();
+      const result = await requestJson(`/api/projects/${latestDraft.current.projectId}/publish`, {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({slug:normalizePublicationSlug(slug),expectedRevision:confirmedRevision,selection,itemAction})});
+      setPublishedDocument(result.document); setPublication({...result.publication,document:result.document});
+      setPublishOpen(false);
+      if(result.warning) setItemPublishError(result.warning);
+    } catch(cause) {
+      const message=cause instanceof Error?cause.message:"Publishing failed. Please retry.";
+      if(itemAction) setItemPublishError(message); else setPublishError(message);
+    } finally { publishBusy.current=false; setPublishing(false); setPublishingItemId(""); }
+  }
+  function publishItem(kind:"page"|"post",itemId:string,status:"draft"|"published") {
+    if(persistence!=="server") return setItemPublishError("Sign in and save this portfolio first.");
+    if(!publishedDocument) { openPublication(); setItemPublishError("Publish the portfolio once using the main dialog, then publish individual articles independently."); return; }
+    void performPublication([`${kind}:${itemId}`],{kind,id:itemId,status});
+  }
   async function unpublish() {
     setPublishing(true); setPublishError("");
-    const response = await fetch(`/api/projects/${state.present.projectId}/publish`, { method: "DELETE" });
-    const result = await response.json(); setPublishing(false);
-    if (!response.ok) return setPublishError(result.error ?? "Could not unpublish.");
-    setPublication(undefined); setPublishedDocument(undefined); setPublishOpen(false);
+    try {
+      await requestJson(`/api/projects/${state.present.projectId}/publish`,{method:"DELETE"});
+      setPublication(undefined);setPublishedDocument(undefined);setPublishOpen(false);
+    } catch(cause) {setPublishError(cause instanceof Error?cause.message:"Could not unpublish. Please retry.");}
+    finally {setPublishing(false);}
   }
 
   const editorPanelRef = useRef<HTMLElement>(null);
@@ -198,7 +151,7 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
           <button type="button" onClick={() => dispatch({ type: "undo", source: "manual" })} disabled={!state.past.length} aria-label="Undo"><Undo2 size={17} /></button>
           <button type="button" onClick={() => dispatch({ type: "redo" })} disabled={!state.future.length} aria-label="Redo"><Redo2 size={17} /></button>
           <button type="button" className="preview-button" onClick={() => { if (previewOnly) setPreviewOnly(false); else { setEditorExpanded(false); setPreviewOnly(true); } }}><Eye size={16} />{previewOnly ? "Exit preview" : "Preview"}</button>
-          {persistence === "server" && <button type="button" className="publish-button" onClick={() => setPublishOpen(true)}><Globe2 size={16} />{publication ? portfolioHasUnpublishedChanges ? "Changes pending" : "Published" : "Publish"}</button>}
+          {persistence === "server" && <button type="button" className="publish-button" onClick={openPublication}><Globe2 size={16} />{publication ? portfolioHasUnpublishedChanges ? "Changes pending" : "Published" : "Publish"}</button>}
           {persistence === "server" && <button type="button" onClick={() => setHistoryOpen(true)}><Clock3 size={16} />History</button>}
           {persistence === "local" && <Link className="publish-button top-link" href={guestClaimPath(authenticated)}><Save size={15} />Save & publish</Link>}
           <Link className="top-link" href={authenticated ? "/projects" : "/login"}>{authenticated ? "My projects" : "Sign in"}</Link>
@@ -216,8 +169,8 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
             <Tab active={state.selectedPanel === "opportunity"} label="Opportunities" icon={<Share2 size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "opportunity" })} />
           </nav>
           {state.lastCommandError && <p className="form-message" role="alert">{state.lastCommandError}</p>}
-          <div className="expanded-editor-surface"><ManualControls document={state.present} publishedDocument={publishedDocument} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} previewTarget={previewTarget} onPreviewTarget={setPreviewTarget} onPublishItem={publishItem} publishingItemId={publishingItemId || pendingItemPublication?.itemId || (pendingGlobalPublication || publishing ? "__snapshot__" : "")} itemPublishError={itemPublishError} canDirectPublish={persistence === "server" && authenticated && slug.length >= 3} /></div>
-          <button type="button" className="reset-button" onClick={() => dispatch({ type: "reset" })}><RotateCcw size={14} />Reset demo</button>
+          <div className="expanded-editor-surface"><ManualControls ensureSaved={flush} document={state.present} publishedDocument={publishedDocument} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} previewTarget={previewTarget} onPreviewTarget={setPreviewTarget} onPublishItem={publishItem} publishingItemId={publishingItemId || (publishing ? "__snapshot__" : "")} itemPublishError={itemPublishError} canDirectPublish={persistence === "server" && authenticated && slug.length >= 3} /></div>
+          {persistence !== "server" && <button type="button" className="reset-button" onClick={() => { if (window.confirm("Reset this draft? You can undo this action.")) dispatch({ type: "reset" }); }}><RotateCcw size={14} />Reset demo</button>}
         </aside>
 
         {!previewOnly && !editorExpanded && <button type="button" className="panel-resizer editor-resizer" style={{ left: editorWidth - 3 }} aria-label="Resize content editor" onPointerDown={(event) => beginResize(event, editorWidth, setEditorWidth, 260, 620, 1)} />}
@@ -231,20 +184,23 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
         {!previewOnly && !editorExpanded && !voiceHidden && <VoicePanel {...voice} onHide={() => setVoiceHidden(true)} />}
         {!previewOnly && !editorExpanded && voiceHidden && <button type="button" className="restore-voice" onClick={() => setVoiceHidden(false)}><PanelRightOpen size={16} />Show voice assistant</button>}
       </div>
+      {visibleError && visibleError!==dismissedError && <div className="studio-error-toast" role="alert"><strong>Action needs attention</strong><button type="button" aria-label="Dismiss notification" onClick={()=>setDismissedError(visibleError)}>Dismiss</button><p>{visibleError}</p>{saveError && <button type="button" onClick={()=>void flush().catch(()=>undefined)}>Retry saving</button>}</div>}
       <footer className="command-footer"><span>One governed command pipeline</span><p>Manual edit <b>→</b> validation <b>→</b> revision <b>→</b> undo</p><p>Voice tool <b>→</b> validation <b>→</b> revision <b>→</b> undo</p></footer>
       {publishOpen && <div className="publish-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPublishOpen(false); }}>
         <section className="publish-dialog" role="dialog" aria-modal="true" aria-labelledby="publish-title">
-          <header><div><span className="eyebrow">IMMUTABLE PUBLICATION</span><h2 id="publish-title">Publish this saved revision</h2></div><button type="button" aria-label="Close publishing dialog" onClick={() => setPublishOpen(false)}><X size={18} /></button></header>
-          <p>Publishing creates a fixed public snapshot of revision {serverRevision.current}. Future Studio edits remain drafts until you publish again.</p>
+          <header><div><span className="eyebrow">IMMUTABLE PUBLICATION</span><h2 id="publish-title">Choose what goes live</h2></div><button type="button" aria-label="Close publishing dialog" onClick={() => setPublishOpen(false)}><X size={18} /></button></header>
+          <p>Selected items update the live website. Unselected items keep their current live version; new unselected drafts stay private.</p>
+          {state.present.opportunity.status !== "canonical" && <div className="publication-guidance"><strong>You are editing an independent opportunity page.</strong><p>Hero and About edits here belong to this opportunity, not your main portfolio.</p>{state.present.opportunity.canonicalProjectId && <Link href={`/studio/${state.present.opportunity.canonicalProjectId}`}>Open main portfolio</Link>}{state.present.opportunity.visibility === "private" && <><p>This opportunity is private. Choose its visibility before publishing.</p><button type="button" onClick={() => { setPublishOpen(false); dispatch({type:"selectPanel",panel:"opportunity"}); }}>Review visibility and approval</button></>}</div>}
+          <div className="publication-selection"><button type="button" disabled={publishing} onClick={()=>setSelectedPublication(publishChoices.filter(row=>!row.missing.length).map(row=>row.key))}>Select all ready items</button><button type="button" disabled={publishing} onClick={()=>setSelectedPublication(publishChoices.filter(row=>row.required).map(row=>row.key))}>Clear optional items</button>{publishChoices.map(row=><label key={row.key}><input type="checkbox" disabled={publishing || row.required || Boolean(row.missing.length)} checked={selectedPublication.includes(row.key)} onChange={event=>setSelectedPublication(current=>event.target.checked?[...current,row.key]:current.filter(key=>key!==row.key))}/><span>{row.label}{row.missing.length>0 && <small>Complete: {row.missing.join(", ")} <button type="button" onClick={event=>{event.preventDefault();setPublishOpen(false);setPreviewOnly(false);dispatch({type:"selectPanel",panel:"content"});const [kind,itemId]=row.key.split(":");setPreviewTarget({section:kind==="post"?"blog posts":"site pages",itemId});}}>Review fields</button></small>}</span></label>)}</div>
           <label>Public URL slug<div className="slug-field"><span>/p/</span><input value={slug} maxLength={64} onChange={(event) => setSlug(normalizePublicationSlug(event.target.value))} /></div></label>
           {publication && <div className="live-publication"><strong>Currently live</strong><a href={`/p/${publication.slug}`} target="_blank" rel="noreferrer">/p/{publication.slug}</a><span>Revision {publication.revision}</span><button type="button" aria-label="Copy public URL" onClick={() => navigator.clipboard.writeText(`${window.location.origin}/p/${publication.slug}`)}><Copy size={15} /> Copy URL</button></div>}
           {publishError && <p className="form-message">{publishError}</p>}
-          <footer><button type="button" className="secondary-action" onClick={() => setPublishOpen(false)}>Cancel</button>{publication && <button type="button" className="danger-action" disabled={publishing || pendingGlobalPublication} onClick={unpublish}>Unpublish</button>}<button type="button" className="primary-action" disabled={publishing || pendingGlobalPublication || slug.length < 3} onClick={publish}>{publishing ? "Publishing…" : pendingGlobalPublication ? "Saving latest draft…" : saved ? publication ? "Publish all changes" : "Publish portfolio" : "Save & publish"}</button></footer>
-          {!saved && !saveError && <small>Your latest edits will save first, then the complete portfolio will publish automatically.</small>}
-          {saveError && <small>The last save failed. “Save & publish” will retry it before publishing.</small>}
+          <footer><button type="button" className="secondary-action" onClick={() => setPublishOpen(false)}>Cancel</button>{publication && <button type="button" className="danger-action" disabled={publishing} onClick={unpublish}>Unpublish</button>}<button type="button" className="primary-action" disabled={publishing || slug.length < 3 || !selectedPublication.length || (state.present.opportunity.status !== "canonical" && state.present.opportunity.visibility === "private")} onClick={() => void performPublication(selectedPublication)}>{publishing ? "Saving & publishing…" : "Publish selected items"}</button></footer>
+          {!saved && !saveError && <small>Your latest edits will save first, then your selected items will publish.</small>}
+          {saveError && <small>The last save failed. “Publish selected items” will retry it before publishing.</small>}
         </section>
       </div>}
-      {historyOpen && <RevisionHistory projectId={state.present.projectId} currentRevision={cloudRevision} onClose={() => setHistoryOpen(false)} onRestored={() => window.location.reload()} />}
+      {historyOpen && <RevisionHistory projectId={state.present.projectId} currentRevision={serverRevision.current} onClose={() => setHistoryOpen(false)} onRestored={() => window.location.reload()} />}
     </main>
   );
 }
@@ -263,10 +219,10 @@ function StudioPreview({ document, target, focusedSkill, execute, reducedMotion,
   }, [reducedMotion, target]);
   const item = target.section === "site pages" ? document.publishing.pages.find((entry) => entry.id === target.itemId) : target.section === "blog posts" ? document.publishing.posts.find((entry) => entry.id === target.itemId) : undefined;
   if (target.section === "blog posts" && target.itemId === "__index__") return <StudioBlogIndex document={document} onNavigate={onNavigate} />;
-  if (target.section === "site pages" || target.section === "blog posts") { const cover = item ? document.media.assets.find((asset) => asset.id === item.coverMediaId) : undefined; return <div ref={previewRef} className={`portfolio-preview content-draft-preview template-${document.design.template} ${isCollectionTemplate(document.design.template) ? "collection-theme" : ""}`} data-accent={document.design.accent}><button type="button" className="preview-back-button" onClick={() => onNavigate({ section: "hero" })}>← Back to homepage preview</button>{item ? <article><p className="section-eyebrow">{target.section === "blog posts" ? "BLOG ARTICLE PREVIEW" : "SITE PAGE PREVIEW"}</p><h1>{item.title}</h1>{"excerpt" in item && item.excerpt && <p className="draft-excerpt">{item.excerpt}</p>}{cover && <figure className="published-content-cover draft-cover"><Image src={cover.url} alt={cover.alt} fill sizes="(max-width: 900px) 94vw, 900px" unoptimized /></figure>}<StructuredContent document={document} blocks={item.blocks} /></article> : <div className="portfolio-empty-state">Create an item to preview it here.</div>}</div>; }
+  if (target.section === "site pages" || target.section === "blog posts") { const cover = item ? document.media.assets.find((asset) => asset.id === item.coverMediaId) : undefined; return <div ref={previewRef} className={`portfolio-preview content-draft-preview template-${document.design.template} ${isCollectionTemplate(document.design.template) ? "collection-theme" : ""}`} data-accent={document.design.accent}><button type="button" className="preview-back-button" onClick={() => onNavigate({ section: "hero" })}>← Back to homepage preview</button>{item ? <article><p className="section-eyebrow">{target.section === "blog posts" ? "BLOG ARTICLE PREVIEW" : "SITE PAGE PREVIEW"}</p><h1>{item.title}</h1>{"excerpt" in item && item.excerpt && <p className="draft-excerpt">{item.excerpt}</p>}{cover && <figure className="published-content-cover draft-cover"><Image src={cover.url} alt={cover.alt} fill sizes="(max-width: 900px) 94vw, 900px" unoptimized /></figure>}<StructuredContent document={document} blocks={item.blocks} richContent={item.richContent} /></article> : <div className="portfolio-empty-state">Create an item to preview it here.</div>}</div>; }
   const navigateSection = (section: PortfolioSection) => onNavigate({ section });
   const sceneHint = document.scene.family === "kinetic-gallery" ? "Move to shift perspective · Select a skill" : document.scene.family === "velocity-roadster" ? "Move to steer the light · Watch the road flow" : document.scene.family === "professional-2d" ? "" : "Drag to orbit · Scroll to zoom · Select a skill";
-  return <div ref={previewRef} className={`portfolio-preview template-${document.design.template} ${isCollectionTemplate(document.design.template) ? "collection-theme" : ""}`} data-accent={document.design.accent}><PortfolioNavigation document={document} onNavigateSection={navigateSection} onNavigatePage={(itemId) => onNavigate({ section: "site pages", itemId })} onNavigateBlog={() => onNavigate({ section: "blog posts", itemId: "__index__" })} />{isCollectionTemplate(document.design.template) ? <CollectionHero document={document} navigate={navigateSection} /> : <div className={`portfolio-hero align-${document.design.heroAlignment}`}><div className="ambient-grid" /><div className="portfolio-copy"><p className="availability"><i />{document.identity.availability}</p><p className="kicker">DESIGNING USEFUL DIGITAL SYSTEMS</p><h2>{document.identity.name}</h2><h3>{document.identity.role}</h3><p className="intro">{document.identity.intro}</p><div className="hero-actions"><button type="button" onClick={() => navigateSection("projects")}>View selected work</button><button type="button" className="ghost" onClick={() => navigateSection("contact")}>Start a conversation</button></div>{focusedSkill && <div className="focus-card"><span>SCENE FOCUS</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}</div>{document.design.template === "professional-2d" && <ProfessionalHeroAside document={document} />}{!isFlatTemplate(document.design.template) && <div className="scene-stage"><SceneRenderer document={document} execute={execute} reducedMotion={reducedMotion} />{sceneHint && <div className="scene-caption"><Volume2 size={14} /><span>{sceneHint}</span></div>}</div>}</div>}<PortfolioSections document={document} editing onOpenPage={(itemId) => onNavigate({ section: "site pages", itemId })} /></div>;
+  return <div ref={previewRef} className={`portfolio-preview template-${document.design.template} ${isCollectionTemplate(document.design.template) ? "collection-theme" : ""}`} data-accent={document.design.accent}><PortfolioNavigation document={document} onNavigateSection={navigateSection} onNavigatePage={(itemId) => onNavigate({ section: "site pages", itemId })} onNavigateBlog={() => onNavigate({ section: "blog posts", itemId: "__index__" })} />{isCollectionTemplate(document.design.template) ? <CollectionHero document={document} navigate={navigateSection} /> : <div className={`portfolio-hero align-${document.design.heroAlignment}`}><div className="ambient-grid" /><div className="portfolio-copy"><p className="availability"><i />{document.identity.availability}</p><p className="kicker">DESIGNING USEFUL DIGITAL SYSTEMS</p><h2>{document.identity.name}</h2><h3>{document.identity.role}</h3><p className="intro">{document.identity.intro}</p><div className="hero-actions"><button type="button" onClick={() => navigateSection("projects")}>View selected work</button><button type="button" className="ghost" onClick={() => navigateSection("contact")}>Start a conversation</button></div>{focusedSkill && <div className="focus-card"><span>SCENE FOCUS</span><strong>{focusedSkill.label}</strong><p>Capability level {focusedSkill.level}/5</p></div>}</div>{document.design.template === "professional-2d" && <ProfessionalHeroAside document={document} />}{!isFlatTemplate(document.design.template) && <div className="scene-stage"><SceneRenderer document={document} execute={execute} reducedMotion={reducedMotion} />{sceneHint && <div className="scene-caption"><Volume2 size={14} /><span>{sceneHint}</span></div>}</div>}</div>}<PortfolioSections document={document} editing onOpenPost={(itemId)=>onNavigate({section:"blog posts",itemId})} onOpenPage={(itemId) => onNavigate({ section: "site pages", itemId })} /></div>;
 }
 
 function StudioBlogIndex({ document, onNavigate }: { document: SiteDocument; onNavigate: (target: PreviewTarget) => void }) {
