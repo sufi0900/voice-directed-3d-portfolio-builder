@@ -11,12 +11,13 @@ import { missingPublicationFields } from "@/domain/publication-selection";
 import { normalizePublishingSlug } from "@/domain/commands";
 import { RichTextField } from "@/features/content/rich-text";
 import { deriveImageAlt } from "@/domain/media";
+import { BlogWritingAssistant } from "./blog-writing-assistant";
 
 type Kind = "page" | "post";
 type Publishable = SiteDocument["publishing"]["pages"][number] | SiteDocument["publishing"]["posts"][number];
-type Props = { document: SiteDocument; publishedDocument?: SiteDocument; execute: (command: SiteCommand) => void; kind: Kind; canUploadMedia: boolean; selectedItemId?: string; onSelect?: (itemId: string) => void; onPreviewListing?: () => void; onPublishItem?: (kind: Kind, itemId: string, status: "draft" | "published") => void; publishingItemId?: string; publishError?: string; canDirectPublish?: boolean };
+type Props = { document: SiteDocument; publishedDocument?: SiteDocument; execute: (command: SiteCommand) => void; kind: Kind; canUploadMedia: boolean; selectedItemId?: string; onSelect?: (itemId: string) => void; onPreviewListing?: () => void; onPublishItem?: (kind: Kind, itemId: string, status: "draft" | "published") => void; publishingItemId?: string; publishError?: string; canDirectPublish?: boolean; ensureSaved?: () => Promise<number>; seededNotes?: { id: number; text: string } };
 
-export function PublishingEditor({ document, publishedDocument, execute, kind, canUploadMedia, selectedItemId, onSelect, onPreviewListing, onPublishItem, publishingItemId = "", publishError = "", canDirectPublish = false }: Props) {
+export function PublishingEditor({ document, publishedDocument, execute, kind, canUploadMedia, selectedItemId, onSelect, onPreviewListing, onPublishItem, publishingItemId = "", publishError = "", canDirectPublish = false, ensureSaved, seededNotes }: Props) {
   const collection = kind === "page" ? document.publishing.pages : document.publishing.posts;
   const selectedId = selectedItemId && collection.some((entry) => entry.id === selectedItemId) ? selectedItemId : collection[0]?.id ?? "";
   useEffect(() => { if (selectedId && selectedId !== selectedItemId) onSelect?.(selectedId); }, [onSelect, selectedId, selectedItemId]);
@@ -45,6 +46,7 @@ export function PublishingEditor({ document, publishedDocument, execute, kind, c
       {!isPage && <><BufferedField label="Article excerpt" value={"excerpt" in item ? item.excerpt : ""} maxLength={320} multiline allowEmpty onCommit={(value) => execute({ type: "publishing.update", kind, itemId: item.id, field: "excerpt", value })} /><BufferedField label="Tags (comma separated)" value={"tags" in item ? item.tags.join(", ") : ""} maxLength={260} allowEmpty onCommit={(value) => execute({ type: "publishing.update", kind, itemId: item.id, field: "tags", value: value.split(",").map((tag) => tag.trim()).filter(Boolean) })} /></>}
       <DirectImageField label="Cover image" document={document} selectedMediaId={item.coverMediaId} enabled={canUploadMedia} execute={execute} onSelect={(mediaId) => execute({ type: "publishing.update", kind, itemId: item.id, field: "coverMediaId", value: mediaId })} />
       <SeoEditor item={item} kind={kind} execute={execute} />
+      {!isPage && <BlogWritingAssistant key={item.id} document={document} post={item as SiteDocument["publishing"]["posts"][number]} execute={execute} enabled={canUploadMedia} ensureSaved={ensureSaved} seededNotes={seededNotes} />}
       <DocumentEditor key={item.id} site={document} kind={kind} item={item} execute={execute} enabled={canUploadMedia} /><details><summary>Advanced block controls</summary>{item.richContent ? <p>This page uses the continuous editor above. Edit there to preserve its formatting.</p> : <BlockEditor document={document} kind={kind} item={item} execute={execute} canUploadMedia={canUploadMedia} />}</details>
     </>}
   </section>;

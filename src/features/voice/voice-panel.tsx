@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, PanelRightClose, Send, Square, Volume2, VolumeX } from "lucide-react";
 import type { TranscriptItem, VoiceStatus } from "./use-assemblyai-agent";
 
-type Props = { status: VoiceStatus; transcript: TranscriptItem[]; error: string | null; active: boolean; start: () => void; stop: () => void; sendText: (message: string) => Promise<void>; textBusy: boolean; soundsEnabled: boolean; setSoundsEnabled: (enabled: boolean) => void; onHide?: () => void };
+type Props = { status: VoiceStatus; transcript: TranscriptItem[]; error: string | null; active: boolean; start: () => void; stop: () => void; sendText: (message: string) => Promise<void>; textBusy: boolean; soundsEnabled: boolean; setSoundsEnabled: (enabled: boolean) => void; onHide?: () => void; contextHint?: string; suggestedRequest?: string; onUseConversationNotes?: () => void };
 
-export function VoicePanel({ status, transcript, error, active, start, stop, sendText, textBusy, soundsEnabled, setSoundsEnabled, onHide }: Props) {
+export function VoicePanel({ status, transcript, error, active, start, stop, sendText, textBusy, soundsEnabled, setSoundsEnabled, onHide, contextHint, suggestedRequest, onUseConversationNotes }: Props) {
   const [message, setMessage] = useState("");
   const transcriptRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -29,6 +29,7 @@ export function VoicePanel({ status, transcript, error, active, start, stop, sen
         <div><p className="eyebrow">VOICE ASSISTANT</p><h2>Speak to direct</h2></div>
         <div className="voice-heading-actions"><span className={`status-dot ${status}`}><i />{status}</span><button type="button" onClick={() => setSoundsEnabled(!soundsEnabled)} title={soundsEnabled ? "Mute assistant sounds" : "Enable assistant sounds"} aria-label={soundsEnabled ? "Mute assistant sounds" : "Enable assistant sounds"}>{soundsEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}</button>{onHide && <button type="button" onClick={onHide} title="Hide voice assistant" aria-label="Hide voice assistant"><PanelRightClose size={15} /></button>}</div>
       </div>
+      {contextHint && <div className="voice-context-hint"><p>{contextHint}</p>{suggestedRequest && <button type="button" disabled={textBusy} onClick={() => void sendText(suggestedRequest)}>Ask Vox for help here</button>}{onUseConversationNotes && <button type="button" disabled={!transcript.some(item => item.speaker === "user" && item.final)} onClick={onUseConversationNotes}>Use our conversation as article notes</button>}</div>}
       <div ref={transcriptRef} className="transcript" aria-live="polite" aria-busy={textBusy || status === "processing"}>
         {transcript.map((item) => (
           <div key={item.id} className={`message ${item.speaker} ${item.final ? "" : "streaming"}`}><span>{item.speaker === "agent" ? "Vox" : item.speaker === "user" ? "You" : "System"}</span>{item.text ? <p>{item.text}{!item.final && <i className="stream-caret" aria-hidden="true" />}</p> : <TypingIndicator label={item.speaker === "user" ? "Listening" : "Vox is responding"} />}</div>

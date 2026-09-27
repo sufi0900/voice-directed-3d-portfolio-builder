@@ -28,4 +28,11 @@ describe("local assistant planner", () => {
   it("opens the governed publication review without relying on a writing provider", () => {
     expect(planLocalAssistant("publish my website")?.calls).toEqual([{ name: "review_publication", arguments: { scope: "website" } }]);
   });
+
+  it("previews a literal site-wide replacement locally and does not swallow a second command", () => {
+    expect(planLocalAssistant("replace high quality content with high quality SEO content everywhere")?.calls).toEqual([
+      { name: "review_site_replace", arguments: { from: "high quality content", to: "high quality SEO content" } },
+    ]);
+    expect(planLocalAssistant("change my hero role to SEO Writer and update my about heading to My Work")).toBeNull();
+  });
 });

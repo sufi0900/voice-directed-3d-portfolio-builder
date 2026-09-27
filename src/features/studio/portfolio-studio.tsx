@@ -53,7 +53,8 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
   const [voiceWidth, setVoiceWidth] = useState(320);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [voiceHidden, setVoiceHidden] = useState(false);
-  const [showVoiceWelcome, setShowVoiceWelcome] = useState(welcomeFromVox);
+  const [blogNotesSeed, setBlogNotesSeed] = useState<{ id: number; text: string }>();
+  const [showVoiceWelcome, setShowVoiceWelcome] = useState(persistence === "server");
   const autoWelcomeAttempted = useRef(false);
   const [itemPublishError, setItemPublishError] = useState("");
   const [dismissedError,setDismissedError]=useState("");
@@ -136,7 +137,7 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     voiceReviewRef.current = null;
     return performPublication(review.selection);
   }
-  const voice = useAssemblyAIAgent({ document: state.present, execute: executeVoice, undo: undoVoice, navigate: navigateFromAssistant, publication: voicePublication, welcomeToStudio: welcomeFromVox });
+  const voice = useAssemblyAIAgent({ document: state.present, execute: executeVoice, undo: undoVoice, navigate: navigateFromAssistant, publication: voicePublication, focus: { section: previewTarget.section, panel: state.selectedPanel, itemId: previewTarget.itemId }, welcomeToStudio: welcomeFromVox });
   useEffect(() => {
     if (!welcomeFromVox || autoWelcomeAttempted.current) return;
     autoWelcomeAttempted.current = true;
@@ -149,6 +150,13 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
     }).catch(() => undefined);
   // The welcome only attempts once on arrival, not on every voice status update.
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [welcomeFromVox]);
+  useEffect(() => {
+    if (!welcomeFromVox || !("speechSynthesis" in window)) return;
+    const announcement = new SpeechSynthesisUtterance("Congratulations! Your private portfolio draft is ready.");
+    announcement.lang = "en-US";
+    window.speechSynthesis.speak(announcement);
+    return () => window.speechSynthesis.cancel();
   }, [welcomeFromVox]);
   useEffect(() => {
     if (!showVoiceWelcome || !["listening", "speaking", "processing"].includes(voice.status)) return;
@@ -203,7 +211,7 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
 
   return (
     <main className={`studio studio-workspace ${previewOnly ? "preview-only" : ""} ${editorExpanded ? "editor-expanded" : ""}`}>
-      {showVoiceWelcome && <div className="vox-studio-welcome" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="vox-welcome-title"><div className="vox-celebration" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span><span>✧</span><span>✦</span></div><p className="eyebrow">YOUR PRIVATE DRAFT IS READY</p><h2 id="vox-welcome-title">You made it. Welcome to your Studio!</h2><p>Vox saved your portfolio privately. Explore the editor on the left, your live canvas in the center and your voice assistant on the right. Vox can guide the next step.</p>{voice.error && <p role="alert">{voice.error}</p>}<div className="vox-welcome-actions"><button className="primary-action" type="button" disabled={voice.status === "connecting"} onClick={() => { setVoiceHidden(false); setEditorExpanded(false); if (!voice.active || voice.status === "error") void voice.start(); else setShowVoiceWelcome(false); }}>{voice.status === "connecting" ? "Connecting Vox…" : "Continue with Vox 🎙"}</button><button className="secondary-action" type="button" onClick={() => setShowVoiceWelcome(false)}>Explore Studio</button></div><small>Your site is still private. Publishing publicly is a separate step.</small></section></div>}
+      {showVoiceWelcome && <div className="vox-studio-welcome" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="vox-welcome-title"><div className="vox-celebration" aria-hidden="true"><span>✦</span><span>✧</span><span>✦</span><span>✧</span><span>✦</span></div><p className="eyebrow">{welcomeFromVox ? "YOUR PRIVATE DRAFT IS READY" : "WELCOME BACK TO YOUR STUDIO"}</p><h2 id="vox-welcome-title">{welcomeFromVox ? "Congratulations! Your private draft is ready." : "Continue your portfolio with Vox"}</h2><p>{welcomeFromVox ? "Your portfolio is saved privately. Explore the editor on the left, your live canvas in the center and Vox on the right." : "Vox can help with the section you are viewing. Start the microphone to give it permission, or continue editing on your own."}</p>{voice.error && <p role="alert">{voice.error}</p>}<div className="vox-welcome-actions"><button className="primary-action" type="button" disabled={voice.status === "connecting"} onClick={() => { if (welcomeFromVox && "speechSynthesis" in window) window.speechSynthesis.cancel(); setVoiceHidden(false); setEditorExpanded(false); if (!voice.active || voice.status === "error") void voice.start(); else setShowVoiceWelcome(false); }}>{voice.status === "connecting" ? "Connecting Vox…" : "Continue with Vox 🎙"}</button><button className="secondary-action" type="button" onClick={() => setShowVoiceWelcome(false)}>Explore Studio</button></div><small>Microphone access starts only when you press Continue with Vox. Publishing publicly is a separate step.</small></section></div>}
       <header className="topbar">
         <div className="brand"><span className="brand-mark"><Layers3 size={19} /></span><div><strong>VOXFOLIO</strong><small>{projectName}</small></div></div>
         <div className="project-state"><span className={saved ? "saved" : "saving"}><Save size={14} />{saveError || (saved ? persistence === "server" ? "Saved to cloud" : "Saved locally" : "Saving…")}</span><i />Revision {state.present.revision}</div>
@@ -219,9 +227,9 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
         </div>
       </header>
 
-      <div className="workspace" style={{ gridTemplateColumns: previewOnly ? undefined : editorExpanded ? "minmax(0, 1fr) 0 0" : `${editorWidth}px minmax(420px,1fr) ${voiceHidden ? "0px" : `${voiceWidth}px`}` }}>
+      <div className="workspace" style={{ gridTemplateColumns: previewOnly ? undefined : editorExpanded ? (voiceHidden ? "minmax(0, 1fr)" : "minmax(0, 7fr) minmax(280px, 3fr)") : `${editorWidth}px minmax(420px,1fr) ${voiceHidden ? "0px" : `${voiceWidth}px`}` }}>
         <aside className="editor-panel" ref={editorPanelRef}>
-          <div className="panel-intro"><div className="panel-title-row"><div><p className="eyebrow">PROJECT · PERSONAL PORTFOLIO</p><h1>Shape the experience</h1></div><button type="button" title={editorExpanded ? "Restore workspace" : "Expand editor"} aria-label={editorExpanded ? "Restore workspace" : "Expand editor"} onClick={() => setEditorExpanded((value) => !value)}>{editorExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button></div><p>Use direct controls for precision. Ask the voice agent for broader changes.</p></div>
+          <div className="panel-intro"><div className="panel-title-row"><div><p className="eyebrow">PROJECT · PERSONAL PORTFOLIO</p><h1>Shape the experience</h1></div><button type="button" title={editorExpanded ? "Restore workspace" : "Expand editor"} aria-label={editorExpanded ? "Restore workspace" : "Expand editor"} onClick={() => { if (!editorExpanded && window.innerWidth <= 900 && !voice.active) setVoiceHidden(true); setEditorExpanded(value => !value); }}>{editorExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button></div><p>Use direct controls for precision. Ask the voice agent for broader changes.</p></div>
           <nav className="editor-tabs" aria-label="Editor sections">
             <Tab active={state.selectedPanel === "content"} label="Content" icon={<Type size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "content" })} />
             <Tab active={state.selectedPanel === "design"} label="Design" icon={<Palette size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "design" })} />
@@ -229,7 +237,7 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
             <Tab active={state.selectedPanel === "opportunity"} label="Opportunities" icon={<Share2 size={16} />} onClick={() => dispatch({ type: "selectPanel", panel: "opportunity" })} />
           </nav>
           {state.lastCommandError && <p className="form-message" role="alert">{state.lastCommandError}</p>}
-          <div className="expanded-editor-surface"><ManualControls ensureSaved={flush} document={state.present} publishedDocument={publishedDocument} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} previewTarget={previewTarget} onPreviewTarget={setPreviewTarget} onPublishItem={publishItem} publishingItemId={publishingItemId || (publishing ? "__snapshot__" : "")} itemPublishError={itemPublishError} canDirectPublish={persistence === "server" && authenticated && slug.length >= 3} /></div>
+          <div className="expanded-editor-surface"><ManualControls ensureSaved={flush} document={state.present} publishedDocument={publishedDocument} execute={executeManual} panel={state.selectedPanel} canUploadMedia={persistence === "server" && authenticated} previewTarget={previewTarget} onPreviewTarget={setPreviewTarget} onPublishItem={publishItem} publishingItemId={publishingItemId || (publishing ? "__snapshot__" : "")} itemPublishError={itemPublishError} canDirectPublish={persistence === "server" && authenticated && slug.length >= 3} blogNotesSeed={blogNotesSeed} /></div>
           {persistence !== "server" && <button type="button" className="reset-button" onClick={() => { if (window.confirm("Reset this draft? You can undo this action.")) dispatch({ type: "reset" }); }}><RotateCcw size={14} />Reset demo</button>}
         </aside>
 
@@ -241,8 +249,8 @@ export function PortfolioStudio({ initialDocument, projectName = "Demo portfolio
         </section>}
 
         {!previewOnly && !editorExpanded && !voiceHidden && <button type="button" className="panel-resizer voice-resizer" style={{ right: voiceWidth - 3 }} aria-label="Resize voice assistant" onPointerDown={(event) => beginResize(event, voiceWidth, setVoiceWidth, 260, 520, -1)} />}
-        {!previewOnly && !editorExpanded && !voiceHidden && <VoicePanel {...voice} onHide={() => setVoiceHidden(true)} />}
-        {!previewOnly && !editorExpanded && voiceHidden && <button type="button" className="restore-voice" onClick={() => setVoiceHidden(false)}><PanelRightOpen size={16} />Show voice assistant</button>}
+        {!previewOnly && !voiceHidden && <VoicePanel {...voice} contextHint={state.selectedPanel === "content" && previewTarget.section === "blog posts" ? "Tell Vox your article idea and supporting facts. Transfer your own words to the reviewable draft in the editor." : state.selectedPanel === "opportunity" ? "Vox can explain this opportunity variant and open its source review." : state.selectedPanel === "design" ? "Describe the visual mood you want. Vox can change the template and describe the result aloud." : state.selectedPanel === "content" && previewTarget.section === "site pages" ? "Vox can help structure your page and navigate to the details you want to edit." : undefined} suggestedRequest={state.selectedPanel === "opportunity" ? "Show the opportunity source review" : state.selectedPanel === "design" ? "Show the design panel" : state.selectedPanel === "content" && previewTarget.section === "blog posts" ? "Open my blog posts" : undefined} onUseConversationNotes={state.selectedPanel === "content" && previewTarget.section === "blog posts" ? () => { const notes = voice.transcript.filter(item => item.speaker === "user" && item.final).slice(-8).map(item => item.text).join("\n").slice(0, 3000); if (notes) setBlogNotesSeed({ id: Date.now(), text: notes }); } : undefined} onHide={() => setVoiceHidden(true)} />}
+        {!previewOnly && voiceHidden && <button type="button" className="restore-voice" onClick={() => setVoiceHidden(false)}><PanelRightOpen size={16} />{voice.active ? "Vox is active · show conversation" : "Show voice assistant"}</button>}
       </div>
       {visibleError && visibleError!==dismissedError && <div className="studio-error-toast" role="alert"><strong>Action needs attention</strong><button type="button" aria-label="Dismiss notification" onClick={()=>setDismissedError(visibleError)}>Dismiss</button><p>{visibleError}</p>{saveError && <button type="button" onClick={()=>void flush().catch(()=>undefined)}>Retry saving</button>}</div>}
       <footer className="command-footer"><span>One governed command pipeline</span><p>Manual edit <b>→</b> validation <b>→</b> revision <b>→</b> undo</p><p>Voice tool <b>→</b> validation <b>→</b> revision <b>→</b> undo</p></footer>

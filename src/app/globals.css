@@ -449,7 +449,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
 /* V14 workspace isolation, template previews and sortable page structure */
 .preview-only .panel-resizer,.preview-only .restore-voice { display:none!important;pointer-events:none!important; }
-.editor-expanded .preview-shell,.editor-expanded .voice-panel,.editor-expanded .panel-resizer,.editor-expanded .restore-voice { display:none!important; }
+.editor-expanded .preview-shell,.editor-expanded .panel-resizer { display:none!important; }
 .section-manager>div { transition:border-color .18s,background .18s,transform .18s; }
 .section-manager>div.dragging { opacity:.55;transform:scale(.985); }
 .section-manager>div.drop-target { border-color:var(--accent);background:rgba(var(--accent-rgb),.09); }
@@ -1715,8 +1715,10 @@ body.public-site.light-theme {
 .studio-workspace .content-draft-preview.template-professional-2d :is(.draft-excerpt,.structured-content p,.structured-content li,.blog-index article p) { color:#3f4640; }
 .studio-workspace .content-draft-preview.template-professional-2d .blog-index article { background:#f9f7f2;border-color:var(--line); }
 /* Expanded authoring is a real desktop workspace, not a stretched narrow panel. */
-.studio-workspace.editor-expanded .workspace { grid-template-columns:minmax(0,1fr)!important; }
-.studio-workspace.editor-expanded .editor-panel { min-width:0;max-width:none;width:100%;padding-inline:clamp(20px,5vw,72px); }
+.studio-workspace.editor-expanded .workspace { grid-template-columns:minmax(0,7fr) minmax(280px,3fr)!important; }
+.studio-workspace.editor-expanded .workspace:has(> .restore-voice) { grid-template-columns:minmax(0,1fr)!important; }
+.studio-workspace.editor-expanded .editor-panel { min-width:0;max-width:none;width:100%;padding-inline:clamp(18px,3vw,44px); }
+.studio-workspace.editor-expanded .voice-panel { display:block!important;position:static;min-width:0;width:auto;max-height:none;box-shadow:none;border-radius:0;border-left:1px solid var(--line); }
 .studio-workspace.editor-expanded .expanded-editor-surface { max-width:1280px;width:100%; }
 .studio-workspace.editor-expanded :is(.control-stack,.opportunity-editor,.opportunity-planner,.publishing-editor,.collection-editor) { min-width:0;max-width:none; }
 .studio-workspace.editor-expanded .control-stack> :is(.opportunity-editor,.opportunity-planner,.opportunity-review,.opportunity-source-review,.opportunity-share,.professional-memory,.agent-health) { grid-column:1/-1; }
@@ -1731,7 +1733,7 @@ body.public-site.light-theme {
 .studio-workspace .editor-panel,.studio-workspace .voice-panel,.studio-workspace .topbar { background-color:#0a101f; }
 .studio-workspace .field select,.studio-workspace .skill-level select { color-scheme:dark; }
 @media (max-width:1100px) {
-  .studio-workspace.editor-expanded .workspace[style] { grid-template-columns:minmax(0,1fr)!important; }
+  .studio-workspace.editor-expanded .workspace[style] { grid-template-columns:minmax(0,7fr) minmax(280px,3fr)!important; }
   .studio-workspace.editor-expanded .editor-panel { width:100%; }
   .studio-workspace.editor-expanded .control-stack { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
@@ -1757,7 +1759,7 @@ body.public-site.light-theme {
 .public-site.template-professional-2d .portfolio-preview { background:var(--paper);color:var(--ink); }
 .public-site.template-professional-2d .portfolio-copy h2 { color:var(--accent);font:600 clamp(17px,2vw,23px)/1.3 Inter,ui-sans-serif,sans-serif;letter-spacing:0;margin:22px 0 0; }
 /* Column resizing affects only the standard Studio; expanded always owns the full frame. */
-@media(max-width:1100px){.studio-workspace.editor-expanded .workspace[style]{grid-template-columns:minmax(0,1fr)!important}}
+@media(max-width:900px){.studio-workspace.editor-expanded .workspace[style]{grid-template-columns:minmax(0,1fr)!important}.studio-workspace.editor-expanded .voice-panel{position:fixed;top:66px;left:auto;right:0;bottom:0;z-index:35;width:min(420px,100vw);height:auto;max-height:none;box-shadow:-15px 0 35px #0008}.studio-workspace.editor-expanded .restore-voice{position:fixed;right:14px;bottom:20px;z-index:30}.studio-workspace.editor-expanded .editor-panel{padding-inline:clamp(14px,3vw,24px)}}
 /* Task navigation remains usable in a 260px editor and becomes a desktop map when expanded. */
 .studio-section-nav { min-width:0;display:flex;gap:7px;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin;padding:2px 2px 10px; }
 .studio-section-nav button,.studio-section-nav a { flex:none;min-height:33px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.035);color:#c5d0e0;font-size:10px;font-weight:650;white-space:nowrap;text-transform:capitalize;text-decoration:none;cursor:pointer; }
@@ -1929,6 +1931,29 @@ body.public-site.light-theme {
 .document-editor .tiptap a { color:#88dfeb;text-decoration:underline; }
 .studio-workspace.editor-expanded .publishing-editor { width:100%;max-width:1080px;margin-inline:auto; }
 @media(max-width:600px){.studio-workspace.editor-expanded .editor-tabs{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* Reviewable article writing stays inside Studio, alongside the rich editor. */
+.voice-context-hint { margin:8px 0 13px;padding:11px;border:1px solid rgba(110,225,207,.25);border-radius:10px;background:rgba(110,225,207,.06);color:#cfe2e6;font-size:12px;line-height:1.45; }
+.voice-context-hint p { margin:0 0 8px; }
+.voice-context-hint button { padding:7px 9px;border:1px solid #527c80;border-radius:7px;background:#19353b;color:#ddfff5;cursor:pointer;font:inherit; }
+.voice-context-hint button:disabled { opacity:.55;cursor:not-allowed; }
+.blog-writing-assistant { display:grid;gap:13px;min-width:0;margin:18px 0;padding:clamp(15px,2vw,22px);border:1px solid #41676c;border-radius:14px;background:linear-gradient(145deg,rgba(33,84,86,.17),rgba(10,19,34,.9));color:#eaf4ff; }
+.blog-writing-assistant>header { display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap; }
+.blog-writing-assistant .eyebrow { color:#7ae1cc; }
+.blog-writing-assistant h3 { margin:5px 0 0;font-size:clamp(18px,2vw,23px); }
+.blog-writing-assistant>p,.blog-writing-review>p:last-of-type { margin:0;color:#b6c5d7;font-size:13px;line-height:1.6; }
+.blog-writing-assistant label { display:grid;gap:8px;font-weight:700;font-size:13px; }
+.blog-writing-assistant textarea { width:100%;min-width:0;resize:vertical;padding:12px;border:1px solid #516579;border-radius:10px;background:#080f1e;color:#f2f7ff;font:inherit;font-weight:400;line-height:1.6; }
+.blog-writing-assistant textarea:focus-visible { outline:2px solid #8ce5d7;outline-offset:2px; }
+.blog-writing-actions { display:flex;align-items:center;gap:12px;flex-wrap:wrap; }
+.blog-writing-actions button { min-height:42px;padding:9px 13px;border-radius:9px;cursor:pointer; }
+.blog-writing-actions button:disabled { opacity:.55;cursor:not-allowed; }
+.blog-writing-actions small { color:#9fb3ca; }
+.blog-writing-review { display:grid;gap:13px;max-height:550px;overflow-y:auto;padding:15px;border:1px solid #627b85;border-radius:10px;background:#0b1628; }
+.blog-writing-review p,.blog-writing-review article { margin:0;line-height:1.65;overflow-wrap:anywhere;font-size:13px;color:#d1dce8; }
+.blog-writing-review h4 { margin:0 0 4px;font-size:16px; }
+.blog-writing-review aside { border-left:3px solid #efc478;padding:8px 12px;background:rgba(239,196,120,.06); }
+.blog-writing-review ul { margin:6px 0;padding-left:20px; }
 .homepage-journal { padding:50px clamp(20px,5%,72px);color:var(--text);border-top:1px solid var(--line); }
 .homepage-journal header { margin-bottom:25px; }.homepage-journal header>span { font-size:11px;letter-spacing:.2em;color:var(--accent); }
 .homepage-journal h2 { font-size:32px;margin:12px 0; }.homepage-journal-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:20px; }
@@ -1936,3 +1961,5 @@ body.public-site.light-theme {
 .homepage-journal article>div:not(.homepage-journal-cover) { padding:22px; }.homepage-journal p { color:var(--muted);line-height:1.7;font-size:14px; }
 .homepage-journal :is(a,button) { color:var(--accent);background:none;border:0;padding:0;cursor:pointer; }
 .homepage-journal-cover { position:relative;aspect-ratio:16/10; }.homepage-journal-cover img { object-fit:cover; }
+
+.core-skills-editor{display:grid;gap:10px;padding:16px;border:1px solid #4f899c;border-radius:12px;background:#102432;color:#edfafc}.core-skills-editor label{display:grid;gap:6px;min-width:0}.core-skills-editor input{width:100%;min-width:0}.core-skills-editor p{margin:0}.core-skills-editor [role="alert"]{color:#ffd3c7}.core-skills-actions{display:flex;gap:10px;flex-wrap:wrap}.core-skills-actions button{flex:1;min-width:120px}.voice-creation-detail .creation-review-fields{gap:16px}

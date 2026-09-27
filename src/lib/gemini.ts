@@ -24,13 +24,16 @@ export async function generateWithGemini({ system, prompt, maxOutputTokens = 180
   const primary = process.env.GEMINI_CONTENT_MODEL || "gemini-3.8-flash";
   const fallback = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite";
   const attempts = [primary, primary, ...(fallback !== primary ? [fallback] : [])];
+  const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
 
   for (let index = 0; index < attempts.length; index += 1) {
     const model = attempts[index];
-    if (index > 0) await delay(index === 1 ? 350 : 850);
+    if (index > 0) await delay(index === 1 ? 350 : 650);
+    const remaining = deadline - Date.now();
+    if (remaining < 400) break;
     try {
-      return await generateOnce({ apiKey, model, system, prompt, maxOutputTokens, timeoutMs });
+      return await generateOnce({ apiKey, model, system, prompt, maxOutputTokens, timeoutMs: Math.min(remaining, Math.max(1300, Math.round(timeoutMs / attempts.length))) });
     } catch (error) {
       lastError = error;
       const retryable = error instanceof GeminiApiError ? error.retryable : error instanceof Error && error.name === "AbortError";

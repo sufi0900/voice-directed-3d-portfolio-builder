@@ -12,4 +12,13 @@ describe("multi-step assistant execution", () => {
     expect(result.completed).toHaveLength(1);
     expect(result.error).toBe("Evidence missing");
   });
+  it("rejects an oversized plan before applying any action", async () => {
+    const visited: string[] = [];
+    const result = await executeAssistantSteps(Array.from({ length: 13 }, (_, index) => ({ name: String(index), arguments: {} })), async call => {
+      visited.push(call.name);
+      return { ok: true, message: "done" };
+    });
+    expect(visited).toEqual([]);
+    expect(result.error).toContain("more than 12");
+  });
 });

@@ -25,6 +25,12 @@ const generativeIntent = /\b(improve|enhance|rewrite|polish|refine|draft|write|g
 export function planLocalAssistant(message: string): AssistantPlan | null {
   const value = message.trim();
   if (!value) return null;
+  // A single-field matcher must never swallow a second instruction as literal field text.
+  if (/\b(?:and|then|also|after that)\s+(?:please\s+)?(?:change|set|update|replace|add|remove|publish|go to|open)\b/i.test(value)) return null;
+
+  const siteReplace = value.match(/^(?:please\s+)?replace\s+[“"']?(.+?)[”"']?\s+with\s+[“"']?(.+?)[”"']?\s+(?:everywhere|across (?:my|the) (?:website|portfolio|site)|throughout (?:my|the) (?:website|portfolio|site))[.!]?$/i);
+  if (siteReplace && siteReplace[1].trim() && siteReplace[2].trim())
+    return { source: "local", reply: "Scanning exact matches for your review. Nothing will change yet.", calls: [{ name: "review_site_replace", arguments: { from: siteReplace[1].trim(), to: siteReplace[2].trim() } }] };
 
   if (/^(?:please\s+)?(?:show|summari[sz]e|list|tell me about)\s+(?:my\s+)?(?:projects|portfolio dashboard|portfolios)[.!]?$/i.test(value))
     return { source: "local", reply: "Reading your saved portfolio dashboard.", calls: [{ name: "summarize_projects", arguments: {} }] };

@@ -7,7 +7,7 @@ export type AssistantNavigation = {
   itemId?: string;
   panel?: "content" | "design" | "scene" | "opportunity";
 };
-export type VoiceToolResult = { ok: true; message: string; navigation?: AssistantNavigation; reviewId?: string; exactReviewId?: string } | { ok: false; error: string };
+export type VoiceToolResult = { ok: true; message: string; navigation?: AssistantNavigation; reviewId?: string; exactReviewId?: string; replacementReviewId?: string } | { ok: false; error: string };
 export type PublicationVoiceAction = (action: "review" | "confirm", values: Record<string, unknown>) => Promise<VoiceToolResult> | VoiceToolResult;
 type Execute = (command: SiteCommand) => void;
 type PolishTarget = "hero_intro" | "about_body" | "experience_summary" | "education_summary" | "project_summary";
@@ -18,6 +18,8 @@ const idParameter = (items: Array<{ id: string; label: string }>) => items.lengt
   : { type: "string", description: "No existing entries are available; use the add action." };
 
 export const createVoiceTools = (document: SiteDocument) => [
+  { type: "function", name: "review_site_replace", description: "Find exact, case-sensitive text throughout the CURRENT portfolio's editable copy, including Hero, About, projects, standalone pages and blogs. Return all affected fields for owner review. Does not apply changes. Never use for changing an age, duration, employer, metric or other factual claim without the owner stating the precise old and new wording. Does not reach other saved portfolios or opportunity variants.", parameters: { type: "object", properties: { from: { type: "string", description: "Exact old phrase, max 160 characters" }, to: { type: "string", description: "Exact new phrase, max 160 characters" } }, required: ["from", "to"] } },
+  { type: "function", name: "confirm_site_replace", description: "Only after the owner separately confirms the exact replacement preview, apply that same preview ID. Never call during the preview turn.", parameters: { type: "object", properties: { review_id: { type: "string" } }, required: ["review_id"] } },
   { type: "function", name: "summarize_projects", description: "Read the signed-in owner's project dashboard, showing saved portfolio names and revision numbers. This does not edit or delete a project. Guide the owner to My projects for further account actions.", parameters: { type: "object", properties: {} } },
   { type: "function", name: "confirm_exact_edit", description: "Apply a previously proposed exact name, role, institution, employer, project/page title, or URL ONLY after the owner explicitly confirms the read-back on a later turn. Use the review_id from the proposal result.", parameters: { type: "object", properties: { review_id: { type: "string" } }, required: ["review_id"] } },
   { type: "function", name: "review_publication", description: "Prepare a review of exactly what will go live. Scope website selects ready changes, post/page selects only that item when the website is already published. This DOES NOT publish. Read the returned summary aloud, then wait for an explicit confirmation on a new user turn.", parameters: { type: "object", properties: { scope: { type: "string", enum: ["website", "post", "page"] }, item_id: { type: "string", description: "Existing page or article ID for post/page" } }, required: ["scope"] } },
@@ -164,16 +166,16 @@ export async function runVoiceTool(name: string, rawArguments: unknown, execute:
         let changes = 0;
         if (string("accent")) { execute({ type: "design.setAccent", value: string("accent") as never }); changes += 1; }
         if (string("background")) { execute({ type: "design.setBackground", value: string("background") as never }); changes += 1; }
-        return changes ? { ok: true, message: `Applied ${changes} approved colour change${changes === 1 ? "" : "s"}.`, navigation: { section: "hero", panel: "design" } } : { ok: false, error: "Specify an approved colour setting." };
+        return changes ? { ok: true, message: `The portfolio preview now uses ${string("accent") || "its existing"} accent and ${string("background") || "its existing"} background. Studio controls keep their dark appearance. The Hero and Design controls are open.`, navigation: { section: "hero", panel: "design" } } : { ok: false, error: "Specify an approved colour setting." };
       }
-      case "set_portfolio_template": execute({ type: "design.setTemplate", value: string("template") as never }); return { ok: true, message: "Applied the requested template while preserving the portfolio content.", navigation: { section: "hero", panel: "design" } };
+      case "set_portfolio_template": execute({ type: "design.setTemplate", value: string("template") as never }); return { ok: true, message: `The portfolio now uses the ${string("template")} presentation. Your written content is preserved; the Hero and Design controls are open to review its appearance.`, navigation: { section: "hero", panel: "design" } };
       case "set_hero_layout": execute({ type: "design.setHeroAlignment", value: string("alignment") as never }); return { ok: true, message: "Updated the Hero alignment.", navigation: { section: "hero", panel: "design" } };
       case "set_scene_style": {
         let changes = 0;
         if (string("preset")) { execute({ type: "scene.setPreset", value: string("preset") as never }); changes += 1; }
         if (string("motion")) { execute({ type: "scene.setMotion", value: string("motion") as never }); changes += 1; }
         if (typeof values.intensity === "number") { execute({ type: "scene.setIntensity", value: values.intensity }); changes += 1; }
-        return changes ? { ok: true, message: "Updated the 3D scene.", navigation: { section: "hero", panel: "scene" } } : { ok: false, error: "Specify a scene setting." };
+        return changes ? { ok: true, message: `The Hero 3D scene now uses ${string("preset") || "the existing"} styling and ${string("motion") || "the existing"} motion${typeof values.intensity === "number" ? ` at intensity ${values.intensity}` : ""}. Scene controls are open for review.`, navigation: { section: "hero", panel: "scene" } } : { ok: false, error: "Specify a scene setting." };
       }
       case "focus_skill": execute({ type: "scene.focusSkill", skillId: string("skill_id") }); return { ok: true, message: "Focused the requested skill.", navigation: { section: "skills", panel: "scene" } };
       case "undo_last_change": undo(); return { ok: true, message: "Undid the previous change." };

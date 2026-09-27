@@ -20,11 +20,20 @@ describe("voice-led creation approval", () => {
       draft = confirmExact(draft, draft.pending!.id);
     }
     expect(isVoiceDraftReady(draft)).toBe(false);
+    expect(() => proposeExact(draft, "skills", "SEO strategy, computer analysis research expert")).toThrow(/Shorten/);
+    draft = proposeExact(draft, "skills", "SEO strategy, Content research");
+    draft = confirmExact(draft, draft.pending!.id);
     draft.direction = { goal: "showcase-work", audience: "clients", tone: "bold", motion: "balanced", emphasis: "results" };
     expect(isVoiceDraftReady(draft)).toBe(false);
     draft.selectedTemplate = "cinematic-orbit";
     expect(isVoiceDraftReady(draft)).toBe(true);
     expect(nextVoiceInterviewStep(draft)).toMatch(/already selected/);
+  });
+
+  it("rejects a single skill and retains the next required step on restart", () => {
+    const draft = { ...emptyVoiceOnboarding(), confirmed: { name: "John Cena", role: "Web designer", intro: "I design websites." } };
+    expect(nextVoiceInterviewStep(draft)).toMatch(/core skills/);
+    expect(() => proposeExact(draft, "skills", "Web design")).toThrow(/2 to 8/);
   });
 
   it("rejects unsupported website URLs instead of accepting an ambiguous spoken link", () => {

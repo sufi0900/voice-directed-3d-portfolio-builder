@@ -2,21 +2,25 @@ import { generateWithGemini } from "./gemini";
 import { generateJsonWithOpenAI } from "./openai-json";
 
 export type AgentProvider = "nebius" | "openrouter" | "gemini" | "openai";
-type Input<T> = { system: string; prompt: string; maxOutputTokens?: number; validate: (raw: unknown) => T };
+type Input<T> = { system: string; prompt: string; maxOutputTokens?: number; totalTimeoutMs?: number; validate: (raw: unknown) => T };
 export type ProviderResult<T> = { value: T; provider: AgentProvider; attempted: AgentProvider[] };
 
 export class AgentProvidersUnavailable extends Error {
   constructor(public readonly attempted: AgentProvider[]) { super("AI generation is unavailable. Direct navigation and exact edits still work."); }
 }
 
-export async function generateValidatedAgentJson<T>({ system, prompt, maxOutputTokens = 1800, validate }: Input<T>): Promise<ProviderResult<T>> {
+export async function generateValidatedAgentJson<T>({ system, prompt, maxOutputTokens = 1800, totalTimeoutMs = 20_000, validate }: Input<T>): Promise<ProviderResult<T>> {
+  const deadline = Date.now() + totalTimeoutMs;
+  const remaining = () => Math.max(0, deadline - Date.now());
   const candidates: { provider: AgentProvider; generate: () => Promise<string> }[] = [];
-  if (process.env.NEBIUS_API_KEY && process.env.NEBIUS_MODEL) candidates.push({ provider: "nebius", generate: () => generateWithNebius({ system, prompt, maxOutputTokens }) });
-  if (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_MODEL) candidates.push({ provider: "openrouter", generate: () => generateWithOpenRouter({ system, prompt, maxOutputTokens }) });
-  if (process.env.GEMINI_API_KEY) candidates.push({ provider: "gemini", generate: () => generateWithGemini({ system, prompt, maxOutputTokens }) });
-  if (process.env.OPENAI_API_KEY) candidates.push({ provider: "openai", generate: () => generateJsonWithOpenAI({ system, prompt, maxOutputTokens }) });
+  const timeout = () => Math.min(8_000, remaining());
+  if (process.env.NEBIUS_API_KEY && process.env.NEBIUS_MODEL) candidates.push({ provider: "nebius", generate: () => generateWithNebius({ system, prompt, maxOutputTokens, timeoutMs: timeout() }) });
+  if (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_MODEL) candidates.push({ provider: "openrouter", generate: () => generateWithOpenRouter({ system, prompt, maxOutputTokens, timeoutMs: timeout() }) });
+  if (process.env.GEMINI_API_KEY) candidates.push({ provider: "gemini", generate: () => generateWithGemini({ system, prompt, maxOutputTokens, timeoutMs: timeout() }) });
+  if (process.env.OPENAI_API_KEY) candidates.push({ provider: "openai", generate: () => generateJsonWithOpenAI({ system, prompt, maxOutputTokens, timeoutMs: timeout() }) });
   const attempted: AgentProvider[] = [];
   for (const candidate of candidates) {
+    if (remaining() < 400) break;
     attempted.push(candidate.provider);
     try {
       return { value: validate(JSON.parse(stripCodeFence(await candidate.generate()))), provider: candidate.provider, attempted };

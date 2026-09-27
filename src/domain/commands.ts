@@ -18,8 +18,10 @@ import {
 } from "./site-document";
 import { applyTemplatePresentation } from "./template-contracts";
 import { reviewOpportunity } from "./opportunity-review";
+import { previewSiteWideReplace } from "./site-wide-replace";
 
 export const siteCommandSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("voice.replaceText"), from: z.string().min(1).max(160), to: z.string().min(1).max(160), expectedRevision: z.number().int().nonnegative() }),
   z.object({ type: z.literal("identity.set"), field: z.enum(["name", "role", "intro", "availability"]), value: z.string() }),
   z.object({ type: z.literal("visitor.enable"), enabled: z.boolean() }),
   z.object({ type: z.literal("visitor.addFact"), text: z.string().trim().min(10).max(900), source: z.string().trim().min(1).max(120) }),
@@ -67,6 +69,7 @@ export const siteCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("publishing.add"), kind: z.enum(["page", "post"]), title: z.string().trim().min(1).max(120).optional(), excerpt: z.string().trim().max(320).optional(), body: z.string().trim().max(4000).optional(), seoTitle: z.string().trim().max(70).optional(), seoDescription: z.string().trim().max(170).optional() }),
   z.object({ type: z.literal("publishing.update"), kind: z.enum(["page", "post"]), itemId: z.string().min(1), field: z.enum(["title", "slug", "seoTitle", "seoDescription", "coverMediaId", "navigationLabel", "excerpt", "tags"]), value: z.union([z.string(), z.array(z.string())]) }),
   z.object({ type: z.literal("publishing.setContent"), kind: z.enum(["page", "post"]), itemId:z.string().min(1), richContent:richNodeSchema, blocks:z.array(structuredBlockSchema).max(200) }),
+  z.object({ type: z.literal("publishing.applyBlogDraft"), itemId:z.string().min(1), expectedItemSnapshot:z.string().min(1), richContent:richNodeSchema, blocks:z.array(structuredBlockSchema).max(200), excerpt:z.string().trim().max(320), seoTitle:z.string().trim().max(70), seoDescription:z.string().trim().max(170) }),
   z.object({ type: z.literal("publishing.remove"), kind: z.enum(["page", "post"]), itemId: z.string().min(1) }),
   z.object({ type: z.literal("publishing.setStatus"), kind: z.enum(["page", "post"]), itemId: z.string().min(1), status: z.enum(["draft", "published"]) }),
   z.object({ type: z.literal("block.add"), kind: z.enum(["page", "post"]), itemId: z.string().min(1), blockType: z.enum(["heading", "paragraph", "quote", "list", "ordered-list", "image"]), afterBlockId: z.string().min(1).optional() }),
@@ -106,6 +109,13 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
 
   if(command.type.startsWith("block.") && "kind" in command && "itemId" in command && findPublishable(current,command.kind as "page"|"post",command.itemId)?.richContent) throw new Error("This page uses the continuous rich text editor. Open the page and edit its content there to preserve formatting.");
   switch (command.type) {
+    case "voice.replaceText": {
+      if (current.revision !== command.expectedRevision) throw new Error("The portfolio changed since the replacement review. Review the matches again before applying.");
+      const preview = previewSiteWideReplace(current, command.from, command.to);
+      if (!preview.occurrences) throw new Error("The exact phrase was not found in editable text in this portfolio. Check capitalization and spacing.");
+      next = { ...preview.next, ...nextRevision(current) };
+      break;
+    }
     case "visitor.enable":
       if (current.visitor.enabled === command.enabled) return current;
       next = { ...current, visitor: { ...current.visitor, enabled: command.enabled }, ...nextRevision(current) };
@@ -377,6 +387,13 @@ export function applySiteCommand(current: SiteDocument, candidate: unknown): Sit
     case "publishing.setContent":
       next = {...current, publishing:updatePublishable(current,command.kind,command.itemId,entry=>({...entry,richContent:command.richContent,blocks:command.blocks})),...nextRevision(current)};
       break;
+    case "publishing.applyBlogDraft": {
+      const post = current.publishing.posts.find((entry) => entry.id === command.itemId);
+      if (!post) throw new Error("The blog article was removed. Create or select another article.");
+      if (JSON.stringify(post) !== command.expectedItemSnapshot) throw new Error("This article changed while Vox was writing. Review the latest article and generate a fresh proposal.");
+      next = { ...current, publishing: { ...current.publishing, posts: current.publishing.posts.map((entry) => entry.id === command.itemId ? { ...entry, richContent: command.richContent, blocks: command.blocks, excerpt: command.excerpt, seoTitle: command.seoTitle, seoDescription: command.seoDescription } : entry) }, ...nextRevision(current) };
+      break;
+    }
     case "publishing.remove":
       if (!findPublishable(current, command.kind, command.itemId)) throw new Error(`The requested ${command.kind} does not exist.`);
       next = command.kind === "page"
@@ -464,6 +481,7 @@ export function describeCommand(command: SiteCommand, document: SiteDocument) {
     case "visitor.enable": return command.enabled ? "Enabled Visitor Vox for the next publication." : "Disabled Visitor Vox for the next publication.";
     case "visitor.addFact": return "Approved a public Visitor Vox note.";
     case "visitor.removeFact": return "Removed a public Visitor Vox note.";
+    case "voice.replaceText": return `Replaced reviewed text across this portfolio.`;
     case "identity.set": return `Updated ${command.field}.`;
     case "design.setAccent": return `Changed the accent to ${command.value}.`;
     case "design.setBackground": return `Changed the background to ${command.value}.`;
@@ -511,6 +529,7 @@ export function describeCommand(command: SiteCommand, document: SiteDocument) {
     case "publishing.add": return `Added a ${command.kind} draft.`;
     case "publishing.update": return `Updated ${command.kind} ${command.field}.`;
     case "publishing.setContent": return "Updated rich page content.";
+    case "publishing.applyBlogDraft": return "Added reviewed article copy to the private Studio draft.";
     case "publishing.remove": return `Removed a ${command.kind}.`;
     case "publishing.setStatus": return `${command.status === "published" ? "Published" : "Returned to draft"} the ${command.kind}.`;
     case "block.add": return `Added a ${command.blockType} block.`;
