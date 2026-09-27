@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { guidedInterviewSchema } from "./guided-interview";
-import { GUIDED_INTERVIEW_STEPS } from "./guided-interview";
+import { completeGuidedDirection, guidedInterviewSchema } from "./guided-interview";
 import { templateOptions } from "./template-contracts";
 
 export const exactFieldSchema = z.enum(["name", "role", "intro", "skills", "education", "website", "projectTitle", "projectSummary"]);
@@ -45,15 +44,17 @@ export function confirmExact(state: VoiceOnboarding, id: string): VoiceOnboardin
 export function isVoiceDraftReady(state: VoiceOnboarding) {
   try { parseCoreSkills(state.confirmed.skills ?? ""); } catch { return false; }
   return Boolean(state.confirmed.name?.trim() && state.confirmed.role?.trim() && state.confirmed.intro?.trim() &&
-    guidedInterviewSchema.safeParse(state.direction).success && state.selectedTemplate && !state.pending);
+    completeGuidedDirection(state.direction) && state.selectedTemplate && !state.pending);
 }
 
-/** The next question is computed from saved facts, including the template choice. */
+/** User-facing progress, never sent verbatim as a spoken greeting. */
 export function nextVoiceInterviewStep(state: VoiceOnboarding): string {
-  if (state.pending) return `Confirm the exact ${exactLabels[state.pending.field]}: ${state.pending.value}.`;
-  for (const field of ["name", "role", "intro"] as const) if (!state.confirmed[field]?.trim()) return `Ask for ${exactLabels[field].toLowerCase()}.`;
-  try { parseCoreSkills(state.confirmed.skills ?? ""); } catch { return "Ask for two or three core skills. Each skill must be 32 characters or fewer; confirm the short, separate labels before continuing."; }
-  for (const step of GUIDED_INTERVIEW_STEPS) if (!state.direction[step.key]) return step.prompt;
-  if (!state.selectedTemplate) return "Show the template previews and ask the user to choose one.";
-  return "The template is already selected. Mention optional education, website and first project briefly, then invite the user to create the private draft. Do not ask for the template again.";
+  if (state.pending) return `Review ${exactLabels[state.pending.field]}: ${state.pending.value}.`;
+  if (!state.confirmed.name?.trim()) return "What name should your portfolio show?";
+  if (!state.confirmed.role?.trim()) return "What is your professional role?";
+  if (!state.confirmed.intro?.trim()) return "How would you describe your work in a sentence or two?";
+  try { parseCoreSkills(state.confirmed.skills ?? ""); } catch { return "Which two or three core skills describe your work?"; }
+  if (!state.direction.goal) return "What should your portfolio help you achieve: win clients, showcase work, or find a role?";
+  if (!state.selectedTemplate) return "Choose a template from the previews on the right.";
+  return "Your portfolio details and template are ready. You can add education, a website link, or a first project, or create your private draft now.";
 }

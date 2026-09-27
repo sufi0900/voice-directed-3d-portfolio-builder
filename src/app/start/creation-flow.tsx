@@ -8,6 +8,7 @@ import { PORTFOLIO_TEMPLATES } from "@/domain/templates";
 import type { CvCandidate } from "@/domain/cv-ingestion";
 import type { GuidedInterview } from "@/domain/guided-interview";
 import { GuidedInterviewPanel } from "./guided-interview";
+import { completeGuidedDirection, GUIDED_INTERVIEW_STEPS } from "@/domain/guided-interview";
 import { VoxGuidedInterview } from "./vox-guided-interview";
 import { emptyVoiceOnboarding, isVoiceDraftReady, parseCoreSkills, voiceOnboardingSchema, type VoiceOnboarding } from "@/domain/voice-onboarding";
 import { describeCreationIssue, guidedCreateSchema, selectedFirstProject } from "@/domain/project-creation";
@@ -37,16 +38,24 @@ export function CreationFlow({ authenticated, suggestedName = "", ownerId = "gue
   const templateAnchor = useRef<HTMLDivElement>(null);
   const [skillsError, setSkillsError] = useState("");
   const [skillEntries, setSkillEntries] = useState<string[]>(["", ""]);
-  const voiceTemplatesReady = voiceDesignReady && Object.keys(voiceState.direction).length === 5;
+  const voiceTemplatesReady = voiceDesignReady && !!voiceState.direction.goal;
+  const optionalAnchor = useRef<HTMLElement>(null);
+  const [firstProjectTitle, setFirstProjectTitle] = useState("");
+  const [firstProjectSummary, setFirstProjectSummary] = useState("");
   useEffect(() => {
     if (mode === "guided" && voiceTemplatesReady && !voiceState.selectedTemplate) templateAnchor.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [mode, voiceTemplatesReady, voiceState.selectedTemplate]);
+  useEffect(() => {
+    if (mode === "guided" && voiceState.selectedTemplate) optionalAnchor.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [mode, voiceState.selectedTemplate]);
   useEffect(() => {
     try {
       const stored = sessionStorage.getItem(`voxfolio-creation:${ownerId}`);
       if (stored) {
         const parsed = (awaitVoiceState(JSON.parse(stored)));
         setVoiceState(parsed);
+        setFirstProjectTitle(parsed.confirmed.projectTitle ?? "");
+        setFirstProjectSummary(parsed.confirmed.projectSummary ?? "");
         if (parsed.confirmed.skills) setSkillEntries(parsed.confirmed.skills.split(",").map(skill => skill.trim()));
         if (parsed.selectedTemplate) setTemplateId(parsed.selectedTemplate);
         setInterview(parsed.direction);
@@ -55,14 +64,17 @@ export function CreationFlow({ authenticated, suggestedName = "", ownerId = "gue
     } catch { /* A damaged temporary interview never overrides the creation form. */ }
   }, [ownerId]);
   function updateVoice(next: VoiceOnboarding) {
-    setVoiceState(next);
+    const normalized = next.direction.goal ? { ...next, direction: completeGuidedDirection(next.direction)! } : next;
+    setVoiceState(normalized);
     setError("");
     setSkillsError("");
-    if (next.confirmed.skills) setSkillEntries(next.confirmed.skills.split(",").map(skill => skill.trim()));
+    if (normalized.confirmed.skills) setSkillEntries(normalized.confirmed.skills.split(",").map(skill => skill.trim()));
+    if (normalized.confirmed.projectTitle !== undefined) setFirstProjectTitle(normalized.confirmed.projectTitle);
+    if (normalized.confirmed.projectSummary !== undefined) setFirstProjectSummary(normalized.confirmed.projectSummary);
     if (next.selectedTemplate) setTemplateId(next.selectedTemplate);
-    setInterview(next.direction);
+    setInterview(normalized.direction);
     setForm(current => ({ ...current, ...Object.fromEntries(Object.entries(next.confirmed).filter(([key]) => ["name","role","intro","skills","education","website"].includes(key))), projectName: current.projectName === "My portfolio" && next.confirmed.name ? `${next.confirmed.name} Portfolio`.slice(0,80) : current.projectName }));
-    try { sessionStorage.setItem(`voxfolio-creation:${ownerId}`, JSON.stringify(next)); } catch { /* The open tab still retains confirmed values. */ }
+    try { sessionStorage.setItem(`voxfolio-creation:${ownerId}`, JSON.stringify(normalized)); } catch { /* The open tab still retains confirmed values. */ }
   }
   function approveTypedRequired(field: "name" | "role" | "intro") {
     const value = form[field].trim().replace(/\s+/g," ");
@@ -74,10 +86,17 @@ export function CreationFlow({ authenticated, suggestedName = "", ownerId = "gue
   function saveSkillEntries(entries: string[]) {
     try {
       const normalized = parseCoreSkills(entries.join(", "));
+      if (voiceState.confirmed.skills === normalized.join(", ") && !voiceState.pending) return;
       updateVoice({ ...voiceState, confirmed: { ...voiceState.confirmed, skills: normalized.join(", ") }, pending: voiceState.pending?.field === "skills" ? null : voiceState.pending });
-      setSkillEntries(normalized);
-      setManualSelection({ id: Date.now(), description: `The user entered and confirmed these core skills: ${normalized.join(", ")}. Continue with the design questions.` });
+      setManualSelection({ id: Date.now(), description: `The user finished typing and confirmed these core skills: ${normalized.join(", ")}. Ask only the single portfolio purpose question next.` });
     } catch (cause) { setSkillsError(cause instanceof Error ? cause.message : "Review each skill."); }
+  }
+  function saveOptionalProject(field: "projectTitle" | "projectSummary", value: string) {
+    if ((voiceState.confirmed[field] ?? "") === value.trim()) return;
+    const confirmed = { ...voiceState.confirmed, [field]: value.trim() };
+    if (!confirmed.projectTitle) { delete confirmed.projectTitle; delete confirmed.projectSummary; setFirstProjectSummary(""); }
+    updateVoice({ ...voiceState, confirmed, projectSkipped: !!voiceState.projectSkipped && !confirmed.projectTitle ? true : false });
+    setManualSelection({ id: Date.now(), description: confirmed.projectTitle ? "The user updated the optional first project in the right panel. Continue from the saved step." : "The optional first project is blank. Do not require it for the private draft." });
   }
   function skipOptional(field: "skills" | "education" | "website") {
     if (field === "skills") { setSkillsError("Add at least two core skills before continuing."); return; }
@@ -98,14 +117,14 @@ export function CreationFlow({ authenticated, suggestedName = "", ownerId = "gue
     if (createdProject.current) return {ok:true,projectId:createdProject.current};
     if (creating.current) return { ok: false, error: "Your private draft is already being saved. Please wait for the result." };
     if (!authenticated) { router.push("/login"); return {ok:false,error:"Sign in to create your private draft."}; }
-    if (fromVoice && (mode !== "guided" || !isVoiceDraftReady(voiceState))) return {ok:false,error:"Confirm your name, role, introduction and at least two short core skills, answer all five design questions and select a template before creating the private draft."};
+    if (fromVoice && (mode !== "guided" || !isVoiceDraftReady(voiceState))) return {ok:false,error:"Confirm your name, role, introduction and at least two short core skills, choose a portfolio purpose and select a template before creating the private draft."};
     const cv = cvSource ? {
       ...cvSource,
       importedAt: new Date().toISOString(),
       originalStored: false as const,
       approvedFacts: cvCandidates.filter((item) => item.approved).map((item) => ({ id: item.id, kind: item.kind, value: item.value, sourceExcerpt: item.sourceExcerpt })),
     } : undefined;
-    const body = mode === "template" ? { mode, templateId, projectName: form.projectName } : { mode: "guided" as const, templateId, ...form, skills: form.skills.split(",").map((item) => item.trim()).filter(Boolean), education: form.education.split("\n").map((item) => item.trim()).filter(Boolean), cv: mode === "manual" ? cv : undefined, interview, firstProject: mode === "guided" ? selectedFirstProject(voiceState) : undefined };
+    const body = mode === "template" ? { mode, templateId, projectName: form.projectName } : { mode: "guided" as const, templateId, ...form, skills: form.skills.split(",").map((item) => item.trim()).filter(Boolean), education: form.education.split("\n").map((item) => item.trim()).filter(Boolean), cv: mode === "manual" ? cv : undefined, interview: mode === "guided" ? completeGuidedDirection(voiceState.direction) : interview, firstProject: mode === "guided" ? selectedFirstProject(voiceState) : undefined };
     if (mode !== "template") {
       if (mode === "guided") { try { parseCoreSkills(form.skills); } catch (cause) { const message = cause instanceof Error ? cause.message : "Review your core skills."; setSkillsError(message); setError(message); return {ok:false,error:message}; } }
       const checked = guidedCreateSchema.safeParse(body);
@@ -175,19 +194,20 @@ export function CreationFlow({ authenticated, suggestedName = "", ownerId = "gue
     {mode !== "template" ? <div className={`guided-fields ${mode === "guided" ? "voice-creation-layout" : ""}`}>
       {mode === "guided" && <VoxGuidedInterview authenticated={authenticated} value={voiceState} onChange={updateVoice} manualSelection={manualSelection} onSkipOptional={skipOptional} onCreateDraft={() => create(true)} saving={busy} creationError={error} />}
       <div className={mode === "guided" ? "voice-creation-detail" : "manual-creation-detail"}>
-      {mode === "guided" && <div className="voice-progress" role="status"><strong>Your interview progress</strong><p>{!voiceState.confirmed.name ? "Start by telling Vox your name." : !voiceState.confirmed.role ? "Name confirmed. Tell Vox your professional role." : !voiceState.confirmed.intro ? "Role confirmed. Tell Vox your introduction." : !voiceState.confirmed.skills ? "Add at least two short core skills, then discuss your design." : !voiceTemplatesReady ? `Story confirmed. Discuss your design preferences with Vox (${Object.keys(voiceState.direction).length} of 5).` : voiceState.selectedTemplate ? "Template selected. Optional details can be added now or later. Ask Vox to create your private draft." : "Design choices ready. Review and choose a template on this side."}</p>{voiceState.projectSkipped && <small>First project skipped. You can add one later in Studio.</small>}</div>}
-      {mode === "guided" && voiceTemplatesReady && <p className="voice-optional-note">Education, a website link and the first project are optional. Tell Vox about them, type them on the right, or skip them and create a private draft. You can add optional details later in Studio.</p>}
+      {mode === "guided" && <div className="voice-progress" role="status"><strong>Your interview progress</strong><p>{!voiceState.confirmed.name ? "Start by telling Vox your name." : !voiceState.confirmed.role ? "Name confirmed. Tell Vox your professional role." : !voiceState.confirmed.intro ? "Role confirmed. Tell Vox your introduction." : !voiceState.confirmed.skills ? "Add two short core skills. Leaving the last skill field saves them automatically." : !voiceTemplatesReady ? "Choose one portfolio purpose on the right: clients, work, or a role." : voiceState.selectedTemplate ? "Template selected. Optional details are below the preview. Create your private draft when ready." : "Purpose saved. Choose a template from the previews below."}</p>{voiceState.projectSkipped && <small>First project skipped. You can add one later in Studio.</small>}</div>}
       <h2 className="creation-review-heading">{mode === "guided" ? "Review the details Vox will use" : "Enter and review your details"}</h2>
       <p className="creation-review-help">{mode === "guided" ? "Confirmed spoken answers appear here. You can correct them using your keyboard. A private draft is created only after review." : "Type your exact details, then review the private first draft in Studio."}</p>
       <div className="creation-review-fields">
       <label>Your name<input value={form.name} maxLength={60} onChange={(e) => { setError(""); setForm({ ...form, name: e.target.value }); }} onBlur={() => { if (mode === "guided" && form.name.trim() && form.name.trim() !== voiceState.confirmed.name) approveTypedRequired("name"); }} /><small className="field-help">{mode === "guided" ? "Type an exact spelling and leave this field to confirm it." : "Use your exact spelling."}</small></label>
       {(mode !== "guided" || !!voiceState.confirmed.name) && <label>Professional role<input value={form.role} maxLength={80} onChange={(e) => { setError(""); setForm({ ...form, role: e.target.value }); }} onBlur={() => { if (mode === "guided" && form.role.trim() && form.role.trim() !== voiceState.confirmed.role) approveTypedRequired("role"); }} placeholder="e.g. Web designer" /><small className="field-help">Enter your exact role, then move to the next field.</small></label>}
       {(mode !== "guided" || !!voiceState.confirmed.role) && <label>Short positioning statement<textarea value={form.intro} onChange={(e) => { setError(""); setForm({ ...form, intro: e.target.value }); }} onBlur={() => { if (mode === "guided" && form.intro.trim() && form.intro.trim() !== voiceState.confirmed.intro) approveTypedRequired("intro"); }} maxLength={220} /></label>}
-      {mode === "guided" ? (voiceState.confirmed.intro && <div className="core-skills-editor" role="group" aria-label="Core skills"><strong>Core skills · at least 2 required</strong><p className="field-help">Each skill is a separate label of at most 32 characters. Start with two; you can add up to eight.</p>{skillEntries.map((skill,index) => <label key={index}>Skill {index+1}<input value={skill} maxLength={32} onChange={event => { setSkillsError(""); setSkillEntries(current => current.map((value,i) => i === index ? event.target.value : value)); }} placeholder={index === 0 ? "Web design" : "UI design"} />{skillEntries.length > 2 && <button type="button" className="text-action" onClick={() => setSkillEntries(current => current.filter((_,i) => i !== index))}>Remove</button>}</label>)}<div className="core-skills-actions"><button type="button" className="secondary-action" disabled={skillEntries.length >= 8} onClick={() => setSkillEntries(current => [...current, ""])}>Add skill</button><button type="button" className="secondary-action" onClick={() => saveSkillEntries(skillEntries)}>Save core skills</button></div>{skillsError && <p role="alert">{skillsError}</p>}</div>) : <label>Core skills <small className="field-help">Up to eight comma-separated skills; 32 characters each</small><textarea value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} maxLength={300} placeholder="e.g. SEO strategy, Keyword research" /></label>}
-      {(mode !== "guided" || !!voiceState.selectedTemplate) && <><label>Education <small className="field-help">Optional · add one credential per line</small><textarea value={form.education} onChange={(e) => { setError(""); setForm({ ...form, education: e.target.value }); }} onBlur={() => { if (mode === "guided") approveTypedOptional("education"); }} maxLength={600} placeholder="e.g. MCS — Abdul Wali Khan University Mardan" /></label><label>Website link <small className="field-help">Optional · this will appear in your contact links</small><input type="url" value={form.website} onChange={(e) => { setError(""); setForm({ ...form, website: e.target.value }); }} onBlur={() => { if (mode === "guided") approveTypedOptional("website"); }} maxLength={300} placeholder="https://yourwebsite.com" /></label></>}
+      {mode === "guided" ? (voiceState.confirmed.intro && <div className="core-skills-editor" role="group" aria-label="Core skills"><strong>Core skills · at least 2 required</strong><p className="field-help">Each skill is a separate label of at most 32 characters. Add at least two; they save when you leave a skill field.</p>{skillEntries.map((skill,index) => <label key={index}>Skill {index+1}<input value={skill} maxLength={32} onChange={event => { setSkillsError(""); setSkillEntries(current => current.map((value,i) => i === index ? event.target.value : value)); }} onBlur={() => { try { parseCoreSkills(skillEntries.join(", ")); saveSkillEntries(skillEntries); } catch { /* Another skill is still being typed. */ } }} placeholder={index === 0 ? "Web design" : "UI design"} />{skillEntries.length > 2 && <button type="button" className="text-action" onClick={() => setSkillEntries(current => current.filter((_,i) => i !== index))}>Remove</button>}</label>)}<div className="core-skills-actions"><button type="button" className="secondary-action" disabled={skillEntries.length >= 8} onClick={() => setSkillEntries(current => [...current, ""])}>Add skill</button></div>{skillsError && <p role="alert">{skillsError}</p>}</div>) : <label>Core skills <small className="field-help">Up to eight comma-separated skills; 32 characters each</small><textarea value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} maxLength={300} placeholder="e.g. SEO strategy, Keyword research" /></label>}
+
       </div>
-      {(mode !== "guided" || voiceTemplatesReady) ? <div ref={templateAnchor} className="template-selection-layout"><div className="template-grid">{PORTFOLIO_TEMPLATES.map((template) => <button type="button" aria-pressed={template.id === templateId && (mode !== "guided" || !!voiceState.selectedTemplate)} className={template.id === templateId && (mode !== "guided" || !!voiceState.selectedTemplate) ? "selected" : ""} key={template.id} onClick={() => { setTemplateId(template.id); if (mode === "guided") { updateVoice({ ...voiceState, selectedTemplate: template.id as VoiceOnboarding["selectedTemplate"] }); setManualSelection({ id: Date.now(), description: `The user selected the ${template.name} template in the right-hand preview. Acknowledge the selection. Tell the user that education, a website link and the first project are optional: they can type them on the right or create their private draft now.` }); } }}><i>{template.mode.toUpperCase()}</i><h3>{template.name}</h3><p>{template.description}</p></button>)}</div><TemplatePreview template={selectedTemplate} /></div> : null}
-      {mode === "manual" && <details className="cv-option"><summary>Optional: import CV evidence</summary><section className={`cv-import ${cvBusy ? "is-processing" : ""}`} aria-busy={cvBusy}>
+      {mode === "guided" && !!voiceState.confirmed.skills && <div className="voice-purpose" role="group" aria-label="Portfolio purpose"><strong>One design question</strong><p>What should your portfolio help you achieve? This sets the initial content focus. You can refine the look with the template below.</p><div className="voice-purpose-options">{GUIDED_INTERVIEW_STEPS[0].options.map(option => <button type="button" key={option.value} aria-pressed={voiceState.direction.goal === option.value} onClick={() => { const goal = option.value as NonNullable<VoiceOnboarding["direction"]["goal"]>; updateVoice({ ...voiceState, direction: { goal } }); setManualSelection({ id: Date.now(), description: `The user chose ${option.label} as the portfolio purpose. The design defaults are now set. Continue to the template choice; do not ask four more design questions.` }); }}><strong>{option.label}</strong><span>{option.description}</span></button>)}</div></div>}
+      {(mode !== "guided" || voiceTemplatesReady) ? <div ref={templateAnchor} className="template-selection-layout"><div className="template-grid">{PORTFOLIO_TEMPLATES.map((template) => <button type="button" aria-pressed={template.id === templateId && (mode !== "guided" || !!voiceState.selectedTemplate)} className={template.id === templateId && (mode !== "guided" || !!voiceState.selectedTemplate) ? "selected" : ""} key={template.id} onClick={() => { setTemplateId(template.id); if (mode === "guided") { updateVoice({ ...voiceState, selectedTemplate: template.id as VoiceOnboarding["selectedTemplate"] }); setManualSelection({ id: Date.now(), description: `The user selected the ${template.name} template in the right-hand preview. Acknowledge the selection. Tell the user that education, a website link and the first project are optional: they can type them on the right or create their private draft now.` }); } }}><i>{template.mode.toUpperCase()}</i><h3>{template.name}</h3><p>{template.description}</p></button>)}</div><TemplatePreview template={selectedTemplate} profile={mode === "guided" ? voiceState.confirmed : form} /></div> : null}
+      {(mode !== "guided" || !!voiceState.selectedTemplate) && <section ref={optionalAnchor} className="voice-optional-fields" aria-label="Optional portfolio details"><h2>Optional details</h2><p>These appear in your portfolio if you add them. You can create your private draft without them.</p><label>Education <small className="field-help">Add one credential per line</small><textarea value={form.education} onChange={event => { setError(""); setForm({ ...form, education: event.target.value }); }} onBlur={() => { if (mode === "guided" && form.education.trim() !== (voiceState.confirmed.education ?? "")) approveTypedOptional("education"); }} maxLength={600} placeholder="e.g. MCS — Abdul Wali Khan University Mardan" /></label><label>Website link<input type="url" value={form.website} onChange={event => { setError(""); setForm({ ...form, website: event.target.value }); }} onBlur={() => { if (mode === "guided" && form.website.trim() !== (voiceState.confirmed.website ?? "")) approveTypedOptional("website"); }} maxLength={300} placeholder="https://yourwebsite.com" /></label>{mode === "guided" && <><label>First project title<input value={firstProjectTitle} maxLength={100} onChange={event => setFirstProjectTitle(event.target.value)} onBlur={() => saveOptionalProject("projectTitle", firstProjectTitle)} placeholder="Optional project" /></label>{firstProjectTitle.trim() && <label>First project summary<textarea value={firstProjectSummary} maxLength={500} onChange={event => setFirstProjectSummary(event.target.value)} onBlur={() => saveOptionalProject("projectSummary", firstProjectSummary)} placeholder="Describe an actual project in your own words" /></label>}</>}</section>}
+            {mode === "manual" && <details className="cv-option"><summary>Optional: import CV evidence</summary><section className={`cv-import ${cvBusy ? "is-processing" : ""}`} aria-busy={cvBusy}>
         <div><span className="eyebrow">OPTIONAL CV GROUNDING</span><h2>Import facts, then approve them</h2><p>PDF, DOCX, or TXT · maximum 5 MB. The original file is processed temporarily and is not stored.</p></div>
         <div className="cv-upload-row">
           <input aria-label="Choose CV" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" onChange={(event) => { setCvFile(event.target.files?.[0] ?? null); setCvSource(null); setCvCandidates([]); }} />
@@ -208,12 +228,12 @@ export function CreationFlow({ authenticated, suggestedName = "", ownerId = "gue
         {cvBusy && <div className="cv-processing" role="status" aria-live="polite"><span className="processing-orbit"><i /><i /><i /></span><strong>Analyzing your CV</strong><small>Reading its structure, identifying evidence, and preparing facts for your approval.</small></div>}
       </section></details>}
       {mode === "manual" && <GuidedInterviewPanel value={interview} onChange={setInterview} groundedFactCount={cvCandidates.filter((item) => item.approved).length} />}
-      {mode === "guided" && voiceDesignReady && !voiceState.projectSkipped && <button type="button" className="secondary-action" onClick={() => { const confirmed = { ...voiceState.confirmed }; delete confirmed.projectTitle; delete confirmed.projectSummary; updateVoice({ ...voiceState, confirmed, pending: voiceState.pending?.field === "projectTitle" || voiceState.pending?.field === "projectSummary" ? null : voiceState.pending, projectSkipped: true }); setManualSelection({ id: Date.now(), description: "The user clicked Skip first project. This is optional and was removed from the draft; do not ask for its title or details again." }); }}>Skip first project for now</button>}
+      {mode === "guided" && voiceState.selectedTemplate && !voiceState.projectSkipped && <button type="button" className="secondary-action" onClick={() => { const confirmed = { ...voiceState.confirmed }; delete confirmed.projectTitle; delete confirmed.projectSummary; setFirstProjectTitle(""); setFirstProjectSummary(""); updateVoice({ ...voiceState, confirmed, pending: voiceState.pending?.field === "projectTitle" || voiceState.pending?.field === "projectSummary" ? null : voiceState.pending, projectSkipped: true }); setManualSelection({ id: Date.now(), description: "The user clicked Skip first project. This is optional and was removed from the draft; do not ask for its title or details again." }); }}>Skip first project for now</button>}
       </div>
     </div> : <div className="template-selection-layout"><div className="template-grid">{PORTFOLIO_TEMPLATES.map((template) => <button type="button" aria-pressed={template.id === templateId} className={template.id === templateId ? "selected" : ""} key={template.id} onClick={() => setTemplateId(template.id)}><i>{template.mode.toUpperCase()}</i><h3>{template.name}</h3><p>{template.description}</p><small>{template.audience}</small></button>)}</div><TemplatePreview template={selectedTemplate} /></div>}
     {error && <div className="form-message" role="alert">{error}</div>}
     {busy && <p className="voice-saving-status" role="status"><span className="inline-spinner" /> Saving your private draft… Waiting for the server to confirm.</p>}
-    {mode === "guided" && !isVoiceDraftReady(voiceState) && <p className="creation-review-help" role="status">To create with Vox, confirm your name, role, introduction and at least two core skills, then answer the five design questions. Use the accessible text route if voice is unavailable.</p>}
+    {mode === "guided" && !isVoiceDraftReady(voiceState) && <p className="creation-review-help" role="status">To create with Vox, confirm your name, role, introduction and at least two core skills, then choose one purpose and a template. Use the accessible text route if voice is unavailable.</p>}
     <button className="primary-action" disabled={busy || !form.projectName || (mode === "guided" && !isVoiceDraftReady(voiceState)) || (mode === "manual" && (!form.name || !form.role || !form.intro || Object.keys(interview).length !== 5))} onClick={() => void create()}>{busy ? "Saving private draft…" : authenticated ? "Create private portfolio draft" : "Sign in to create"}</button>
   </section>;
 }
@@ -225,8 +245,14 @@ function awaitVoiceState(value: unknown): VoiceOnboarding {
   return parsed.data;
 }
 
-function TemplatePreview({ template }: { template: (typeof PORTFOLIO_TEMPLATES)[number] }) {
-  const document = template.document;
+function TemplatePreview({ template, profile }: { template: (typeof PORTFOLIO_TEMPLATES)[number]; profile?: { name?: string; role?: string; intro?: string; skills?: string } }) {
+  const source = template.document;
+  const skills = profile?.skills?.split(",").map(label => label.trim()).filter(Boolean);
+  const document = {
+    ...source,
+    identity: { ...source.identity, name: profile?.name?.trim() || source.identity.name, role: profile?.role?.trim() || source.identity.role, intro: profile?.intro?.trim() || source.identity.intro },
+    skills: skills?.length ? skills.slice(0, 8).map((label, index) => ({ id: `preview-skill-${index}`, label, level: 3 })) : source.skills,
+  };
   if (isCollectionTemplate(template.id)) return <aside className={`template-library-preview template-${template.id} collection-theme`} data-accent={document.design.accent} aria-live="polite"><header><strong>{template.name}</strong><span>Scroll to explore</span></header><div className={`portfolio-preview template-${template.id} collection-theme collection-library-canvas`} data-accent={document.design.accent}><CollectionHero document={document} /><CollectionSections document={document} editing /></div></aside>;
   return <aside className={`template-library-preview template-${template.id}`} data-accent={document.design.accent} aria-live="polite">
     <header><div><span>SELECTED TEMPLATE</span><strong>{template.name}</strong></div><em>Responsive preview</em></header>

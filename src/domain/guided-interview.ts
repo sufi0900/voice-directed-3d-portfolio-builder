@@ -12,6 +12,17 @@ export const guidedInterviewSchema = z.object({
 export type GuidedInterview = z.infer<typeof guidedInterviewSchema>;
 export type GuidedInterviewKey = keyof GuidedInterview;
 
+/** One intentional choice supplies internal defaults; earlier detailed answers stay intact. */
+export function completeGuidedDirection(value: Partial<GuidedInterview>): GuidedInterview | null {
+  if (!value.goal) return null;
+  const defaults: Record<GuidedInterview["goal"], Omit<GuidedInterview, "goal">> = {
+    "win-clients": { audience: "clients", tone: "bold", motion: "balanced", emphasis: "results" },
+    "showcase-work": { audience: "collaborators", tone: "minimal", motion: "balanced", emphasis: "story" },
+    "find-role": { audience: "employers", tone: "structured", motion: "reduced", emphasis: "skills" },
+  };
+  return guidedInterviewSchema.parse({ ...defaults[value.goal], ...value });
+}
+
 export const GUIDED_INTERVIEW_STEPS: Array<{
   key: GuidedInterviewKey;
   prompt: string;

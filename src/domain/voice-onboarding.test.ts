@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { confirmExact, emptyVoiceOnboarding, isVoiceDraftReady, nextVoiceInterviewStep, proposeExact } from "./voice-onboarding";
 import { applySiteCommand } from "./commands";
 import { DEFAULT_SITE_DOCUMENT } from "./site-document";
+import { completeGuidedDirection } from "./guided-interview";
 
 describe("voice-led creation approval", () => {
   it("does not use a misheard name before a matching confirmation", () => {
@@ -12,7 +13,7 @@ describe("voice-led creation approval", () => {
     expect(confirmExact(corrected, corrected.pending!.id).confirmed.name).toBe("Sufian Mustafa");
   });
 
-  it("requires confirmed identity, introduction and all design choices", () => {
+  it("requires confirmed identity, skills, one purpose and a template", () => {
     let draft = emptyVoiceOnboarding();
     for (const [field, value] of [["name", "Sufian Mustafa"], ["role", "SEO Specialist"], ["intro", "I build useful SEO systems."]] as const) {
       draft = proposeExact(draft, field, value);
@@ -23,11 +24,19 @@ describe("voice-led creation approval", () => {
     expect(() => proposeExact(draft, "skills", "SEO strategy, computer analysis research expert")).toThrow(/Shorten/);
     draft = proposeExact(draft, "skills", "SEO strategy, Content research");
     draft = confirmExact(draft, draft.pending!.id);
-    draft.direction = { goal: "showcase-work", audience: "clients", tone: "bold", motion: "balanced", emphasis: "results" };
+    expect(nextVoiceInterviewStep(draft)).toMatch(/achieve/);
+    draft.direction = { goal: "showcase-work" };
     expect(isVoiceDraftReady(draft)).toBe(false);
     draft.selectedTemplate = "cinematic-orbit";
     expect(isVoiceDraftReady(draft)).toBe(true);
-    expect(nextVoiceInterviewStep(draft)).toMatch(/already selected/);
+    expect(nextVoiceInterviewStep(draft)).toMatch(/template are ready/);
+    expect(completeGuidedDirection(draft.direction)).toMatchObject({ goal: "showcase-work", audience: "collaborators", tone: "minimal" });
+  });
+
+  it("resumes older partial design answers without repeating the goal or overwriting answered values", () => {
+    const legacy = { goal: "win-clients" as const, audience: "employers" as const };
+    expect(completeGuidedDirection(legacy)).toMatchObject({ goal: "win-clients", audience: "employers", motion: "balanced" });
+    expect(nextVoiceInterviewStep({ ...emptyVoiceOnboarding(), confirmed: { name: "John Cena", role: "Web designer", intro: "I create websites.", skills: "Web design, UI design" }, direction: legacy })).toMatch(/template/);
   });
 
   it("rejects a single skill and retains the next required step on restart", () => {
