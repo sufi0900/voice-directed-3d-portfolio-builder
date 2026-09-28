@@ -79,7 +79,7 @@ export function CreationFlow({ authenticated, suggestedName = "", ownerId = "gue
   function approveTypedRequired(field: "name" | "role" | "intro") {
     const value = form[field].trim().replace(/\s+/g," ");
     if (!value) { setError(`${field === "role" ? "Professional role" : field} cannot be empty.`); return; }
-    const next = { ...voiceState, confirmed: { ...voiceState.confirmed, [field]: value }, pending: voiceState.pending?.field === field ? null : voiceState.pending };
+    const next = { ...voiceState, confirmed: { ...voiceState.confirmed, [field]: value }, pending: voiceState.pending?.field === field ? null : voiceState.pending, correcting: voiceState.correcting === field ? null : voiceState.correcting };
     updateVoice(next);
     setManualSelection({ id: Date.now(), description: `The user typed and confirmed ${field} as ${value}. This exact field is complete. Continue with ${field === "name" ? "professional role" : field === "role" ? "introduction" : "core skills"}, not an earlier question.` });
   }
@@ -87,7 +87,7 @@ export function CreationFlow({ authenticated, suggestedName = "", ownerId = "gue
     try {
       const normalized = parseCoreSkills(entries.join(", "));
       if (voiceState.confirmed.skills === normalized.join(", ") && !voiceState.pending) return;
-      updateVoice({ ...voiceState, confirmed: { ...voiceState.confirmed, skills: normalized.join(", ") }, pending: voiceState.pending?.field === "skills" ? null : voiceState.pending });
+      updateVoice({ ...voiceState, confirmed: { ...voiceState.confirmed, skills: normalized.join(", ") }, pending: voiceState.pending?.field === "skills" ? null : voiceState.pending, correcting: voiceState.correcting === "skills" ? null : voiceState.correcting });
       setManualSelection({ id: Date.now(), description: `The user finished typing and confirmed these core skills: ${normalized.join(", ")}. Ask only the single portfolio purpose question next.` });
     } catch (cause) { setSkillsError(cause instanceof Error ? cause.message : "Review each skill."); }
   }
@@ -101,7 +101,7 @@ export function CreationFlow({ authenticated, suggestedName = "", ownerId = "gue
   function skipOptional(field: "skills" | "education" | "website") {
     if (field === "skills") { setSkillsError("Add at least two core skills before continuing."); return; }
     const confirmed = { ...voiceState.confirmed }; delete confirmed[field];
-    updateVoice({ ...voiceState, confirmed, pending: voiceState.pending?.field === field ? null : voiceState.pending });
+    updateVoice({ ...voiceState, confirmed, pending: voiceState.pending?.field === field ? null : voiceState.pending, correcting: voiceState.correcting === field ? null : voiceState.correcting });
     setForm(previous => ({ ...previous, [field]: "" }));
   }
   function approveTypedOptional(field: "education" | "website") {

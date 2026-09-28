@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { confirmExact, emptyVoiceOnboarding, isVoiceDraftReady, nextVoiceInterviewStep, proposeExact } from "./voice-onboarding";
+import { beginExactCorrection, confirmExact, emptyVoiceOnboarding, isVoiceDraftReady, nextVoiceInterviewStep, proposeExact, submitExactCorrection, voiceOnboardingSchema } from "./voice-onboarding";
 import { applySiteCommand } from "./commands";
 import { DEFAULT_SITE_DOCUMENT } from "./site-document";
 import { completeGuidedDirection } from "./guided-interview";
 
 describe("voice-led creation approval", () => {
+  it("keeps the name step locked until a corrected spelling is submitted and saved", () => {
+    const proposed = proposeExact(emptyVoiceOnboarding(), "name", "Sufyan Mustafa");
+    const correcting = voiceOnboardingSchema.parse(beginExactCorrection(proposed));
+    expect(correcting.pending?.value).toBe("Sufyan Mustafa");
+    expect(nextVoiceInterviewStep(correcting)).toMatch(/Correct Your name below/);
+    expect(() => confirmExact(correcting, proposed.pending!.id)).toThrow(/Submit the corrected spelling/);
+    expect(correcting.confirmed.name).toBeUndefined();
+    const saved = submitExactCorrection(correcting, "Sufian Mustafa");
+    expect(saved).toMatchObject({ confirmed: { name: "Sufian Mustafa" }, pending: null, correcting: null });
+    expect(nextVoiceInterviewStep(saved)).toMatch(/professional role/);
+    expect(() => submitExactCorrection(correcting, " ")).toThrow();
+  });
   it("does not use a misheard name before a matching confirmation", () => {
     const proposed = proposeExact(emptyVoiceOnboarding(), "name", "Sufyan Mustafa");
     expect(proposed.confirmed.name).toBeUndefined();

@@ -23,6 +23,7 @@ export const voiceOnboardingSchema = z.object({
   selectedTemplate: z.enum(templateOptions).optional(),
   projectSkipped: z.boolean().optional(),
   pending: z.object({ field: exactFieldSchema, value: z.string(), id: z.string().uuid() }).nullable().default(null),
+  correcting: exactFieldSchema.nullable().optional(),
 });
 export type VoiceOnboarding = z.infer<typeof voiceOnboardingSchema>;
 export const emptyVoiceOnboarding = (): VoiceOnboarding => ({ confirmed: {}, direction: {}, pending: null });
@@ -32,23 +33,37 @@ export function proposeExact(state: VoiceOnboarding, field: ExactField, raw: str
   if (!value || value.length > limits[field]) throw new Error(`${exactLabels[field]} must be between 1 and ${limits[field]} characters.`);
   if (field === "skills") parseCoreSkills(value);
   if (field === "website" && !/^https?:\/\/[^\s]+$/i.test(value)) throw new Error("Please provide a complete website URL beginning with https://.");
-  return { ...state, pending: { field, value, id: crypto.randomUUID() } };
+  return { ...state, pending: { field, value, id: crypto.randomUUID() }, correcting: null };
+}
+
+export function beginExactCorrection(state: VoiceOnboarding): VoiceOnboarding {
+  if (!state.pending) throw new Error("There is no proposed detail to correct.");
+  return { ...state, correcting: state.pending.field };
+}
+
+/** Submitting the text is an explicit approval of its exact spelling. */
+export function submitExactCorrection(state: VoiceOnboarding, raw: string): VoiceOnboarding {
+  if (!state.correcting) throw new Error("Choose a detail to correct first.");
+  const proposed = proposeExact(state, state.correcting, raw);
+  return confirmExact(proposed, proposed.pending!.id);
 }
 
 export function confirmExact(state: VoiceOnboarding, id: string): VoiceOnboarding {
   if (!state.pending || state.pending.id !== id) throw new Error("That answer changed. Please review the latest wording before confirming.");
   const { field, value } = state.pending;
-  return { ...state, confirmed: { ...state.confirmed, [field]: value }, pending: null };
+  if (state.correcting) throw new Error("Submit the corrected spelling before confirming.");
+  return { ...state, confirmed: { ...state.confirmed, [field]: value }, pending: null, correcting: null };
 }
 
 export function isVoiceDraftReady(state: VoiceOnboarding) {
   try { parseCoreSkills(state.confirmed.skills ?? ""); } catch { return false; }
   return Boolean(state.confirmed.name?.trim() && state.confirmed.role?.trim() && state.confirmed.intro?.trim() &&
-    completeGuidedDirection(state.direction) && state.selectedTemplate && !state.pending);
+    completeGuidedDirection(state.direction) && state.selectedTemplate && !state.pending && !state.correcting);
 }
 
 /** User-facing progress, never sent verbatim as a spoken greeting. */
 export function nextVoiceInterviewStep(state: VoiceOnboarding): string {
+  if (state.correcting) return `Correct ${exactLabels[state.correcting]} below, then submit the spelling before continuing.`;
   if (state.pending) return `Review ${exactLabels[state.pending.field]}: ${state.pending.value}.`;
   if (!state.confirmed.name?.trim()) return "What name should your portfolio show?";
   if (!state.confirmed.role?.trim()) return "What is your professional role?";
