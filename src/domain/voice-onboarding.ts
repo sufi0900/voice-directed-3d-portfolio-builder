@@ -70,6 +70,6 @@ export function nextVoiceInterviewStep(state: VoiceOnboarding): string {
   if (!state.confirmed.intro?.trim()) return "How would you describe your work in a sentence or two?";
   try { parseCoreSkills(state.confirmed.skills ?? ""); } catch { return "Which two or three core skills describe your work?"; }
   if (!state.direction.goal) return "What should your portfolio help you achieve: win clients, showcase work, or find a role?";
-  if (!state.selectedTemplate) return "Choose a template from the previews on the right.";
+  if (!state.selectedTemplate) return "Preview templates on the right, then confirm your choice before continuing.";
   return "Your portfolio details and template are ready. You can add education, a website link, or a first project, or create your private draft now.";
 }

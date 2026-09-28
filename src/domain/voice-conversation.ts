@@ -16,5 +16,11 @@ export function appendSpokenWord(previous: string, delta: string): string {
 export function isDraftCreationIntent(input: string): boolean {
   const value = input.trim().toLowerCase();
   if (/\b(?:don't|do not|not yet|wait|hold|cancel|later|should i|can i|how do i)\b/.test(value)) return false;
-  return /\b(?:publish(?: it)? now|create (?:my |the |a )?(?:private )?draft|save (?:my |the |a )?(?:private )?draft|finish (?:my |the )?(?:portfolio|draft)|(?:go ahead and |please )?(?:publish|create|save) (?:it|the draft|my draft)|proceed (?:to|with) (?:the )?(?:draft|publish|creation|final step)|finalize (?:my |the )?(?:draft|portfolio))\b/.test(value);
+  return /\b(?:publish(?: it)? now|create (?:my |the |a )?(?:private )?(?:first )?draft(?: now)?|save (?:my |the |a )?(?:private )?draft(?: now)?|finish (?:my |the )?(?:portfolio|draft)|(?:go ahead and |please )?(?:publish|create|save) (?:it|the draft|my draft)(?: now)?|(?:create|save|build|make) it (?:now|again)|proceed (?:to|with) (?:the )?(?:draft|publish|creation|final step)|finalize (?:my |the )?(?:draft|portfolio))\b/.test(value);
+}
+
+export function isTemplateConfirmationIntent(input: string): boolean {
+  const value = input.trim().toLowerCase();
+  if (/\b(?:don't|do not|not yet|wait|hold|cancel|how|can i|should i)\b/.test(value)) return false;
+  return /\b(?:confirm|approve|finalize|lock in) (?:this |the |my )?(?:template|design|choice|selection)\b|\b(?:this is (?:my|the) (?:template|one)|use this template)\b/.test(value);
 }

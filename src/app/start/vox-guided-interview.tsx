@@ -5,21 +5,22 @@ import { exactFieldSchema, exactLabels, proposeExact, confirmExact, beginExactCo
 import { completeGuidedDirection, guidedInterviewSchema, GUIDED_INTERVIEW_STEPS } from "@/domain/guided-interview";
 import { PORTFOLIO_TEMPLATES } from "@/domain/templates";
 import { templateOptions } from "@/domain/template-contracts";
-import { appendSpokenWord, isAffirmative, isDraftCreationIntent } from "@/domain/voice-conversation";
+import { appendSpokenWord, isAffirmative, isDraftCreationIntent, isTemplateConfirmationIntent } from "@/domain/voice-conversation";
 
 const exactFields = Object.keys(exactLabels) as ExactField[];
 const creationTools = [
   { type: "function", name: "propose_exact", description: "Propose an exact value without saving it. Read back the result; ask the user if its spelling and wording are exact before confirming on a later turn.", parameters: { type: "object", properties: { field: { type: "string", enum: exactFields }, value: { type: "string" } }, required: ["field", "value"] } },
   { type: "function", name: "confirm_exact", description: "Only after the user explicitly says yes to the previous read-back, confirm the pending proposal ID. Never call in the proposal turn.", parameters: { type: "object", properties: { proposal_id: { type: "string" } }, required: ["proposal_id"] } },
   { type: "function", name: "set_direction", description: "Set the ONE required portfolio purpose after asking what this portfolio should achieve. Use key goal and value win-clients, showcase-work, or find-role. This single choice fills presentation defaults; do not ask separate audience, tone, motion or emphasis questions.", parameters: { type: "object", properties: { key: { type: "string", enum: ["goal"] }, value: { type: "string", enum: GUIDED_INTERVIEW_STEPS[0].options.map(option => option.value) } }, required: ["key", "value"] } },
-  { type: "function", name: "choose_template", description: "Choose the actual portfolio template after explaining its audience and visual style. The visual preview will update. Confirm the user's selection; do not invent a template.", parameters: { type: "object", properties: { template_id: { type: "string", enum: templateOptions } }, required: ["template_id"] } },
+  { type: "function", name: "choose_template", description: "PREVIEW a template when the owner asks to see it. This never confirms the choice or advances to optional fields; the owner can preview as many as they want.", parameters: { type: "object", properties: { template_id: { type: "string", enum: templateOptions } }, required: ["template_id"] } },
+  { type: "function", name: "confirm_template", description: "Confirm the template currently shown in the preview ONLY when the owner explicitly asks to confirm this template. Clicking a preview alone is not confirmation.", parameters: { type: "object", properties: {} } },
   { type: "function", name: "skip_project", description: "Only when the user says they want to skip the optional first project. Continue the interview without asking for project facts.", parameters: { type: "object", properties: {} } },
   { type: "function", name: "skip_optional", description: "When the user explicitly wants to leave optional education or website link blank, remove its saved content. Never remove required identity details.", parameters: { type: "object", properties: { field: { type: "string", enum: ["education", "website"] } }, required: ["field"] } },
   { type: "function", name: "create_private_draft", description: "Immediately request the real server save only when the user asks to create their private draft and all required confirmed details, design answers and template are ready. This does not publish a public site. Report the actual tool result; never claim a save before success.", parameters: { type: "object", properties: {} } },
 ] as const;
 
 /** Exploratory conversation. Speech is never copied into identity, credentials or publishing fields. */
-export function VoxGuidedInterview({ authenticated, value, onChange, manualSelection, onCreateDraft, onSkipOptional, saving, creationError }: { authenticated: boolean; value: VoiceOnboarding; onChange: (value: VoiceOnboarding) => void; manualSelection?: { id: number; description: string }; onCreateDraft: () => Promise<{ok:boolean;error?:string;projectId?:string}>; onSkipOptional: (field: "skills" | "education" | "website") => void; saving: boolean; creationError: string }) {
+export function VoxGuidedInterview({ authenticated, value, onChange, manualSelection, previewTemplateId, onPreviewTemplate, onCreateDraft, onSkipOptional, saving, creationError }: { authenticated: boolean; value: VoiceOnboarding; onChange: (value: VoiceOnboarding) => void; manualSelection?: { id: number; description: string }; previewTemplateId: VoiceOnboarding["selectedTemplate"]; onPreviewTemplate: (id: NonNullable<VoiceOnboarding["selectedTemplate"]>) => void; onCreateDraft: () => Promise<{ok:boolean;error?:string;projectId?:string}>; onSkipOptional: (field: "skills" | "education" | "website") => void; saving: boolean; creationError: string }) {
   const [lines, setLines] = useState<Array<{ who: "you" | "vox"; text: string }>>([]);
   const [live, setLive] = useState("");
   const [spoken, setSpoken] = useState("");
@@ -41,6 +42,14 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
   const lastConfirmation = useRef("");
   const current = useRef(value);
   current.current = value;
+  const latestSave = useRef(onCreateDraft);
+  latestSave.current = onCreateDraft;
+  const latestPreview = useRef(onPreviewTemplate);
+  latestPreview.current = onPreviewTemplate;
+  const latestSkipOptional = useRef(onSkipOptional);
+  latestSkipOptional.current = onSkipOptional;
+  const previewedTemplate = useRef(previewTemplateId);
+  previewedTemplate.current = previewTemplateId;
   const toolResults = useRef<Array<{ call_id: string; result: string; is_error?: boolean }>>([]);
   const replyDone = useRef(false);
   const previousTurn = useRef("");
@@ -54,7 +63,7 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest" }); }, [lines, live, spoken]);
   function change(next: VoiceOnboarding) { current.current = next; onChange(next); }
   function prompt(state: VoiceOnboarding) {
-    return `You are Vox, a voice-directed portfolio creator. The next unfinished question for the owner is: ${nextVoiceInterviewStep(state)}. If correcting is set, tell the owner to type the corrected spelling and press Save corrected spelling; WAIT and DO NOT ask the next question or call tools until that happens. If a pending proposal exists, ask for confirmation of THAT proposal only; NEVER ask about a subsequent field before the pending proposal is confirmed. This is internal guidance: NEVER recite instructions or progress text verbatim, especially after restarting. If the purpose or template is already saved, acknowledge it briefly and move on. Speak in one or two short sentences and ask one question at a time. Ask for name, professional role, introduction, then at least two core skills. After hearing each exact field, call propose_exact for that field; read it back and only confirm on a later owner turn. When the owner types or confirms a field in the right panel, trust the updated saved state and skip that question. Manually typed core skills save when the owner leaves the field; do not proceed before the saved skills appear. Ask ONE design question about the portfolio's purpose (win clients, showcase work, find a role), then call set_direction with key goal. Audience, tone, motion and emphasis are derived internally; NEVER ask separate questions about them. Then offer template previews on the right and use choose_template when the owner selects by voice. After selection, the right panel displays optional education, website and first project; point to it and invite creation of a private draft. An optional first project can be skipped using skip_project. If the owner clearly requests creation, call create_private_draft. Report only the actual save result. Never invent proper noun spelling, achievements or credentials. Current confirmed facts: ${JSON.stringify(state.confirmed)}. Purpose and presentation defaults: ${JSON.stringify(state.direction)}. Selected template: ${state.selectedTemplate ?? "none"}. First project skipped: ${!!state.projectSkipped}. Pending proposal: ${state.pending ? JSON.stringify(state.pending) : "none"}. Correcting field: ${state.correcting ?? "none"}. Available templates: ${JSON.stringify(PORTFOLIO_TEMPLATES.map(t=>({id:t.id,name:t.name})))}. Respond in English.`;
+    return `You are Vox, a voice-directed portfolio creator. The next unfinished question for the owner is: ${nextVoiceInterviewStep(state)}. If correcting is set, tell the owner to type the corrected spelling and press Save corrected spelling; WAIT and DO NOT ask the next question or call tools until that happens. If a pending proposal exists, ask for confirmation of THAT proposal only; NEVER ask about a subsequent field before the pending proposal is confirmed. This is internal guidance: NEVER recite instructions or progress text verbatim, especially after restarting. If the purpose or template is already saved, acknowledge it briefly and move on. Speak in one or two short sentences and ask one question at a time. Ask for name, professional role, introduction, then at least two core skills. After hearing each exact field, call propose_exact for that field; read it back and only confirm on a later owner turn. When the owner types or confirms a field in the right panel, trust the updated saved state and skip that question. Manually typed core skills save when the owner leaves the field; do not proceed before the saved skills appear. Ask ONE design question about the portfolio's purpose (win clients, showcase work, find a role), then call set_direction with key goal. Audience, tone, motion and emphasis are derived internally; NEVER ask separate questions about them. Then offer template previews on the right. choose_template ONLY previews a design; owners may inspect every option. NEVER treat preview as confirmation. Wait until they press Confirm this template or explicitly ask to confirm this template before moving to optional details. After confirmation, the right panel displays optional education, website and first project; point to it and invite creation of a private draft. An optional first project can be skipped using skip_project. If the owner clearly requests creation, call create_private_draft. Report only the actual save result. Never invent proper noun spelling, achievements or credentials. Current confirmed facts: ${JSON.stringify(state.confirmed)}. Purpose and presentation defaults: ${JSON.stringify(state.direction)}. Confirmed template: ${state.selectedTemplate ?? "none"}. Current visual preview: ${previewedTemplate.current ?? "none"}. First project skipped: ${!!state.projectSkipped}. Pending proposal: ${state.pending ? JSON.stringify(state.pending) : "none"}. Correcting field: ${state.correcting ?? "none"}. Available templates: ${JSON.stringify(PORTFOLIO_TEMPLATES.map(t=>({id:t.id,name:t.name})))}. Respond in English.`;
   }
   function notifyManual(description: string) {
     const ws = socket.current;
@@ -94,7 +103,7 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
   }
   async function saveOnce() {
     if (savingDraft.current) return savingDraft.current;
-    const task = onCreateDraft(); savingDraft.current = task;
+    const task = latestSave.current(); savingDraft.current = task;
     try { return await task; } finally { savingDraft.current = null; }
   }
   async function handleTool(item: { name?: string; call_id?: string; arguments?: unknown }) {
@@ -147,12 +156,19 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
         if (!templateId) throw new Error("Choose a listed portfolio template.");
         if (!completeGuidedDirection(current.current.direction)) throw new Error("Choose the portfolio purpose before selecting a template.");
         const template = PORTFOLIO_TEMPLATES.find(item => item.id === templateId)!;
-        if (current.current.selectedTemplate && current.current.selectedTemplate !== templateId && (userTurn.current <= manualTemplateTurn.current || !/\b(change|switch|choose|select|pick|use|prefer)\b/i.test(previousTurn.current))) {
-          result = { selected: PORTFOLIO_TEMPLATES.find(t => t.id === current.current.selectedTemplate)?.name, already_selected: true, next_step: nextVoiceInterviewStep(current.current) };
+        if (current.current.selectedTemplate && userTurn.current <= manualTemplateTurn.current) {
+          result = { confirmed: true, selected: current.current.selectedTemplate, next_step: "The owner already confirmed a template using the button. Do not overwrite that choice." };
         } else {
-        change({ ...current.current, selectedTemplate: templateId });
-        result = { selected: template.name, description: template.description, preview_updated: true, next_step: "Tell the user that education, website link and first project are optional on the right. They can add them now or later; if ready, ask them to request their private draft." };
+        previewedTemplate.current = templateId;
+        latestPreview.current(templateId);
+        if (current.current.selectedTemplate && current.current.selectedTemplate !== templateId) change({ ...current.current, selectedTemplate: undefined });
+        result = { preview: template.name, description: template.description, preview_updated: true, confirmed: false, next_step: "This is a visual preview only. Invite the owner to compare other templates or press Confirm this template. Do not advance yet." };
         }
+      } else if (item.name === "confirm_template") {
+        if (!completeGuidedDirection(current.current.direction) || !previewedTemplate.current) throw new Error("Preview a template after the purpose question before confirming it.");
+        if (!isTemplateConfirmationIntent(previousTurn.current)) throw new Error("Wait for the owner's explicit request to confirm this template.");
+        change({ ...current.current, selectedTemplate: previewedTemplate.current });
+        result = { confirmed: true, selected: previewedTemplate.current, next_step: "The template is confirmed. Tell the owner education, website link and first project are optional. Ask whether to create the private draft now." };
       } else if (item.name === "skip_project") {
         const confirmed = { ...current.current.confirmed }; delete confirmed.projectTitle; delete confirmed.projectSummary;
         change({ ...current.current, confirmed, pending: current.current.pending?.field === "projectTitle" || current.current.pending?.field === "projectSummary" ? null : current.current.pending, projectSkipped: true });
@@ -160,7 +176,7 @@ export function VoxGuidedInterview({ authenticated, value, onChange, manualSelec
       } else if (item.name === "skip_optional") {
         const field = args.field;
         if (field !== "education" && field !== "website") throw new Error("Only education and website are optional here. Core skills are required.");
-        onSkipOptional(field);
+        latestSkipOptional.current(field);
         result = { skipped: field, next_step: "Proceed with the other confirmed details." };
       } else if (item.name === "create_private_draft") {
         if (!isVoiceDraftReady(current.current)) throw new Error("Confirm name, role, introduction and two core skills, then select one purpose and a template before creating the private draft.");
